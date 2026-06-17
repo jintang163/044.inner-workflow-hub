@@ -1,0 +1,189 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+  tomcat:
+    threads:
+      max: 500
+    uri-encoding: UTF-8
+
+spring:
+  application:
+    name: inner-workflow-hub
+  profiles:
+    active: dev
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 100MB
+
+  datasource:
+    type: com.alibaba.druid.pool.DruidDataSource
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3306/inner_workflow_hub?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=GMT%2B8&nullCatalogMeansCurrent=true
+    username: root
+    password: root
+    druid:
+      initial-size: 10
+      max-active: 100
+      min-idle: 10
+      max-wait: 60000
+      pool-prepared-statements: true
+      max-pool-prepared-statement-per-connection-size: 20
+      time-between-eviction-runs-millis: 60000
+      min-evictable-idle-time-millis: 300000
+      validation-query: SELECT 1
+      test-while-idle: true
+      test-on-borrow: false
+      test-on-return: false
+      stat-view-servlet:
+        enabled: true
+        url-pattern: /druid/*
+        login-username: admin
+        login-password: admin123
+      filter:
+        stat:
+          log-slow-sql: true
+          slow-sql-millis: 2000
+        wall:
+          config:
+            multi-statement-allow: true
+
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      password: ''
+      database: 0
+      timeout: 10s
+      lettuce:
+        pool:
+          max-active: 50
+          max-wait: -1ms
+          max-idle: 20
+          min-idle: 5
+
+  kafka:
+    bootstrap-servers: 127.0.0.1:9092
+    producer:
+      acks: all
+      retries: 3
+      batch-size: 16384
+      buffer-memory: 33554432
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      properties:
+        linger.ms: 1
+        enable.idempotence: true
+    consumer:
+      group-id: workflow-group
+      auto-offset-reset: latest
+      enable-auto-commit: false
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      max-poll-records: 100
+      properties:
+        session.timeout.ms: 30000
+        request.timeout.ms: 40000
+
+  mail:
+    host: smtp.exmail.qq.com
+    port: 465
+    username: noreply@company.com
+    password: your-password
+    protocol: smtps
+    properties:
+      mail:
+        smtp:
+          auth: true
+          ssl:
+            enable: true
+          starttls:
+            enable: true
+            required: true
+
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8
+    serialization:
+      write-dates-as-timestamps: false
+    default-property-inclusion: non_null
+
+  mvc:
+    pathmatch:
+      matching-strategy: ant_path_matcher
+
+flowable:
+  async-executor-activate: true
+  database-schema-update: true
+  history-level: full
+  idm-engine-enabled: false
+  form-enabled: false
+  content-type: application/json
+  rest:
+    cors:
+      enabled: true
+
+mybatis-plus:
+  mapper-locations: classpath*:mapper/**/*.xml
+  type-aliases-package: com.innerworkflow.common.entity;com.innerworkflow.auth.entity;com.innerworkflow.bpmn.entity;com.innerworkflow.form.entity;com.innerworkflow.approval.entity;com.innerworkflow.notify.entity
+  configuration:
+    map-underscore-to-camel-case: true
+    cache-enabled: false
+    call-setters-on-nulls: true
+    jdbc-type-for-null: 'null'
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+  global-config:
+    banner: false
+    db-config:
+      id-type: auto
+      table-underline: true
+      logic-delete-field: isDeleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn
+  openapi:
+    title: 统一审批流系统 API文档
+    description: 企业内部多业务线统一审批流系统接口文档
+    version: v1.0.0
+    concat: admin@company.com
+    group:
+      default:
+        group-name: 全部接口
+        api-rule: package
+        api-rule-resources:
+          - com.innerworkflow
+
+workflow:
+  jwt:
+    secret: inner-workflow-hub-secret-key-please-change-in-production-2024
+    expiration: 86400
+    header: Authorization
+    prefix: 'Bearer '
+  notify:
+    dingtalk:
+      enabled: false
+      app-key: your-dingtalk-app-key
+      app-secret: your-dingtalk-app-secret
+    wecom:
+      enabled: false
+      corp-id: your-wecom-corp-id
+      agent-id: your-agent-id
+      secret: your-wecom-secret
+  file:
+    upload-path: ./uploads/
+    url-prefix: /static/
+
+logging:
+  level:
+    root: INFO
+    com.innerworkflow: DEBUG
+    org.flowable: WARN
+    org.springframework.security: DEBUG
+    org.springframework.kafka: INFO
+  pattern:
+    console: '%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n'
