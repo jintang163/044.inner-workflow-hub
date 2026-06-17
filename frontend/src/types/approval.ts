@@ -1,0 +1,175 @@
+export type TaskStatus = 'PENDING' | 'DONE' | 'TRANSFERRED' | 'DELEGATED' | 'REJECTED' | 'WITHDRAWN'
+
+export type Priority = 1 | 2 | 3
+
+export type ApprovalResult = 'APPROVE' | 'REJECT' | 'TRANSFER' | 'ADD_SIGN' | 'DELEGATE' | 'REJECT_TO_NODE' | 'WITHDRAW'
+
+export type InstanceStatus = 1 | 2 | 3 | 4
+
+export type ActivityType = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8
+
+export interface AttachmentVO {
+  id: number
+  fileName: string
+  fileUrl: string
+  fileSize: number
+  uploadTime: string
+}
+
+export interface ApprovalTaskVO {
+  id: number
+  taskNo: string
+  flowableTaskId: string
+  instanceId: number
+  instanceNo: string
+  processKey: string
+  processName: string
+  title: string
+  nodeId: string
+  nodeName: string
+  assigneeId: number
+  assigneeName: string
+  assignTime: string
+  dueTime: string
+  taskStatus: TaskStatus
+  priority: Priority
+  startUserId: number
+  startUserName: string
+  startUserAvatar?: string
+  startDeptName: string
+  startTime: string
+  formData: Record<string, any>
+  approvalResult?: ApprovalResult
+  myComment?: string
+  handleTime?: string
+  readStatus?: 0 | 1
+  canAddSign: boolean
+  canTransfer: boolean
+  canDelegate: boolean
+  canReject: boolean
+  canWithdraw?: boolean
+  needSignature: boolean
+  needComment: boolean
+}
+
+export interface ApprovalHistoryVO {
+  id: number
+  nodeId: string
+  nodeName: string
+  activityType: ActivityType
+  activityTypeDesc?: string
+  operatorId: number
+  operatorName: string
+  operatorAvatar?: string
+  operatorDeptName: string
+  targetUserId?: number
+  targetUserName?: string
+  targetNodeId?: string
+  targetNodeName?: string
+  actionRemark?: string
+  signatureUrl?: string
+  attachmentIds?: number[]
+  attachmentList?: AttachmentVO[]
+  duration?: number
+  operateTime: string
+  status?: 'pending' | 'approved' | 'rejected' | 'transferred' | 'current'
+}
+
+export interface ProcessInstanceVO {
+  id: number
+  instanceNo: string
+  processKey: string
+  processName: string
+  title: string
+  formId: number
+  formVersion: number
+  formData: Record<string, any>
+  formSchema?: any
+  instanceStatus: InstanceStatus
+  instanceStatusDesc?: string
+  startUserId: number
+  startUserName: string
+  startUserAvatar?: string
+  startDeptName: string
+  startTime: string
+  endTime?: string
+  bpmnXml?: string
+  currentNodeIds: string[]
+  currentNodeNames?: string[]
+  canWithdraw?: boolean
+}
+
+export interface ProcessCategoryVO {
+  id: number
+  parentId: number
+  categoryName: string
+  businessLineId?: number
+  businessLineName?: string
+  children?: ProcessCategoryVO[]
+}
+
+export interface StartableProcessVO {
+  id: number
+  processName: string
+  processKey: string
+  categoryId: number
+  categoryName: string
+  businessLineId?: number
+  businessLineName?: string
+  icon?: string
+  description?: string
+  formId: number
+  formVersion: number
+  formSchema?: any
+}
+
+export interface DraftVO {
+  id: number
+  processKey: string
+  processName: string
+  title: string
+  formData: Record<string, any>
+  updateTime: string
+}
+
+export interface CcTaskVO extends ApprovalTaskVO {
+  readStatus: 0 | 1
+  ccTime: string
+}
+
+export interface ApproveDTO {
+  taskId: string
+  instanceId: number
+  comment?: string
+  signatureUrl?: string
+  attachmentIds?: number[]
+}
+
+export interface RejectDTO extends ApproveDTO {
+  targetNodeId?: string
+}
+
+export interface TransferDTO extends ApproveDTO {
+  targetUserId: number
+  targetUserName: string
+}
+
+export interface AddSignDTO extends ApproveDTO {
+  targetUserIds: number[]
+  targetUserNames: string[]
+  signType: 'BEFORE' | 'AFTER'
+}
+
+export interface DelegateDTO extends ApproveDTO {
+  targetUserId: number
+  targetUserName: string
+}
+
+export interface StartProcessDTO {
+  processKey: string
+  title: string
+  formData: Record<string, any>
+  ccUserIds?: number[]
+  attachmentIds?: number[]
+  draftId?: number
+}

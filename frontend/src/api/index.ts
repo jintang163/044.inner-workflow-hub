@@ -1,0 +1,190 @@
+import request from '@/utils/request'
+import {
+  LoginDTO,
+  LoginVO,
+  UserInfoVO,
+  UserVO,
+  RoleVO,
+  DeptVO,
+  MenuVO,
+  PageResult,
+  FormDefinitionVO,
+  ProcessDefinitionVO,
+  WfTaskVO,
+  WfProcessInstanceVO,
+  WfApprovalHistoryVO
+} from '@/types'
+import {
+  ApprovalTaskVO,
+  ApprovalHistoryVO,
+  ProcessInstanceVO,
+  ProcessCategoryVO,
+  StartableProcessVO,
+  DraftVO,
+  CcTaskVO,
+  ApproveDTO,
+  RejectDTO,
+  TransferDTO,
+  AddSignDTO,
+  DelegateDTO,
+  StartProcessDTO
+} from '@/types/approval'
+
+export const authApi = {
+  login: (data: LoginDTO) => request<LoginVO>({ url: '/auth/login', method: 'post', data }),
+  logout: () => request<void>({ url: '/auth/logout', method: 'post' }),
+  getUserInfo: () => request<UserInfoVO>({ url: '/auth/user-info', method: 'get' }),
+  getMenus: () => request<MenuVO[]>({ url: '/auth/menus', method: 'get' })
+}
+
+export const userApi = {
+  list: (params?: any) => request<PageResult<UserVO>>({ url: '/system/user/list', method: 'get', params }),
+  get: (id: number) => request<UserVO>({ url: `/system/user/${id}`, method: 'get' }),
+  save: (data: any) => request<UserVO>({ url: '/system/user', method: 'post', data }),
+  update: (data: any) => request<UserVO>({ url: '/system/user', method: 'put', data }),
+  remove: (id: number) => request<void>({ url: `/system/user/${id}`, method: 'delete' }),
+  updateStatus: (id: number, status: number) =>
+    request<void>({ url: `/system/user/${id}/status`, method: 'put', data: { status } }),
+  resetPassword: (id: number, newPassword: string) =>
+    request<void>({ url: `/system/user/${id}/reset-password`, method: 'put', data: { newPassword } })
+}
+
+export const roleApi = {
+  list: (params?: any) => request<PageResult<RoleVO>>({ url: '/system/role/list', method: 'get', params }),
+  all: () => request<RoleVO[]>({ url: '/system/role/all', method: 'get' }),
+  get: (id: number) => request<RoleVO>({ url: `/system/role/${id}`, method: 'get' }),
+  save: (data: any) => request<RoleVO>({ url: '/system/role', method: 'post', data }),
+  update: (data: any) => request<RoleVO>({ url: '/system/role', method: 'put', data }),
+  remove: (id: number) => request<void>({ url: `/system/role/${id}`, method: 'delete' })
+}
+
+export const menuApi = {
+  tree: () => request<MenuVO[]>({ url: '/system/menu/tree', method: 'get' }),
+  get: (id: number) => request<MenuVO>({ url: `/system/menu/${id}`, method: 'get' }),
+  save: (data: any) => request<MenuVO>({ url: '/system/menu', method: 'post', data }),
+  update: (data: any) => request<MenuVO>({ url: '/system/menu', method: 'put', data }),
+  remove: (id: number) => request<void>({ url: `/system/menu/${id}`, method: 'delete' })
+}
+
+export const deptApi = {
+  tree: () => request<DeptVO[]>({ url: '/system/dept/tree', method: 'get' }),
+  get: (id: number) => request<DeptVO>({ url: `/system/dept/${id}`, method: 'get' }),
+  save: (data: any) => request<DeptVO>({ url: '/system/dept', method: 'post', data }),
+  update: (data: any) => request<DeptVO>({ url: '/system/dept', method: 'put', data }),
+  remove: (id: number) => request<void>({ url: `/system/dept/${id}`, method: 'delete' })
+}
+
+export const processApi = {
+  definitionList: (params?: any) =>
+    request<PageResult<ProcessDefinitionVO>>({ url: '/process/definition/list', method: 'get', params }),
+  definitionGet: (id: number) =>
+    request<ProcessDefinitionVO>({ url: `/process/definition/${id}`, method: 'get' }),
+  definitionSave: (data: any) =>
+    request<ProcessDefinitionVO>({ url: '/process/definition', method: 'post', data }),
+  definitionUpdate: (data: any) =>
+    request<ProcessDefinitionVO>({ url: '/process/definition', method: 'put', data }),
+  definitionRemove: (id: number) =>
+    request<void>({ url: `/process/definition/${id}`, method: 'delete' }),
+  definitionDeploy: (data: any) => request<void>({ url: '/process/definition/deploy', method: 'post', data }),
+  designGet: (id: number) => request<any>({ url: `/process/design/${id}`, method: 'get' }),
+  designSave: (data: any) => request<any>({ url: '/process/design/save', method: 'post', data }),
+  designDeploy: (data: any) => request<any>({ url: '/process/design/deploy', method: 'post', data }),
+  validate: (data: any) =>
+    request<ValidateResultVO[]>({ url: '/process/design/validate', method: 'post', data }),
+  simulate: (data: any) =>
+    request<SimulateStepVO[]>({ url: '/process/design/simulate', method: 'post', data }),
+  versionList: (processDefinitionId: number) =>
+    request<ProcessVersionVO[]>({ url: `/process/version/${processDefinitionId}/list`, method: 'get' }),
+  versionRollback: (id: number) =>
+    request<void>({ url: `/process/version/${id}/rollback`, method: 'post' }),
+  formFields: (formId: number) =>
+    request<FormFieldVO[]>({ url: `/form/definition/${formId}/fields`, method: 'get' }),
+  categoryTree: () => request<ProcessCategoryVO[]>({ url: '/process/category/tree', method: 'get' }),
+  categorySave: (data: any) => request<any>({ url: '/process/category', method: 'post', data }),
+  categoryUpdate: (data: any) => request<any>({ url: '/process/category', method: 'put', data }),
+  categoryRemove: (id: number) => request<void>({ url: `/process/category/${id}`, method: 'delete' }),
+  businessLineList: (params?: any) =>
+    request<PageResult<any>>({ url: '/process/business-line/list', method: 'get', params }),
+  businessLineSave: (data: any) => request<any>({ url: '/process/business-line', method: 'post', data }),
+  businessLineUpdate: (data: any) => request<any>({ url: '/process/business-line', method: 'put', data }),
+  businessLineRemove: (id: number) =>
+    request<void>({ url: `/process/business-line/${id}`, method: 'delete' })
+}
+
+export const formApi = {
+  definitionList: (params?: any) =>
+    request<PageResult<FormDefinitionVO>>({ url: '/form/definition/list', method: 'get', params }),
+  definitionGet: (id: number) =>
+    request<FormDefinitionVO>({ url: `/form/definition/${id}`, method: 'get' }),
+  definitionSave: (data: any) =>
+    request<FormDefinitionVO>({ url: '/form/definition', method: 'post', data }),
+  definitionUpdate: (data: any) =>
+    request<FormDefinitionVO>({ url: '/form/definition', method: 'put', data }),
+  definitionRemove: (id: number) =>
+    request<void>({ url: `/form/definition/${id}`, method: 'delete' }),
+  definitionPublish: (id: number) =>
+    request<void>({ url: `/form/definition/${id}/publish`, method: 'post' }),
+  designGet: (id: number) => request<any>({ url: `/form/design/${id}`, method: 'get' }),
+  designSave: (data: any) => request<any>({ url: '/form/design', method: 'post', data }),
+  draftList: (params?: any) => request<PageResult<DraftVO>>({ url: '/form/draft/list', method: 'get', params }),
+  draftSave: (data: any) => request<DraftVO>({ url: '/form/draft/save', method: 'post', data }),
+  draftGet: (id: number) => request<DraftVO>({ url: `/form/draft/${id}`, method: 'get' }),
+  draftRemove: (id: number) => request<void>({ url: `/form/draft/${id}`, method: 'delete' })
+}
+
+export const approvalApi = {
+  todoList: (params?: any) =>
+    request<PageResult<ApprovalTaskVO>>({ url: '/api/approval/task/todo', method: 'get', params }),
+  doneList: (params?: any) =>
+    request<PageResult<ApprovalTaskVO>>({ url: '/api/approval/task/done', method: 'get', params }),
+  ccList: (params?: any) =>
+    request<PageResult<CcTaskVO>>({ url: '/api/approval/task/cc', method: 'get', params }),
+  myApplyList: (params?: any) =>
+    request<PageResult<ProcessInstanceVO>>({ url: '/api/approval/process/my-apply', method: 'get', params }),
+  startableList: () =>
+    request<StartableProcessVO[]>({ url: '/api/bpmn/process/startable', method: 'get' }),
+  instanceDetail: (instanceNo: string) =>
+    request<ProcessInstanceVO>({ url: `/api/approval/instance/${instanceNo}`, method: 'get' }),
+  approvalHistory: (instanceNo: string) =>
+    request<ApprovalHistoryVO[]>({ url: `/api/approval/instance/${instanceNo}/history`, method: 'get' }),
+  approve: (data: ApproveDTO) => request<void>({ url: '/api/approval/approve', method: 'post', data }),
+  reject: (data: RejectDTO) => request<void>({ url: '/api/approval/reject', method: 'post', data }),
+  transfer: (data: TransferDTO) => request<void>({ url: '/api/approval/transfer', method: 'post', data }),
+  addSign: (data: AddSignDTO) => request<void>({ url: '/api/approval/addSign', method: 'post', data }),
+  delegate: (data: DelegateDTO) => request<void>({ url: '/api/approval/delegate', method: 'post', data }),
+  withdraw: (data: { instanceId: number; comment?: string }) =>
+    request<void>({ url: '/api/approval/withdraw', method: 'post', data }),
+  start: (data: StartProcessDTO) =>
+    request<ProcessInstanceVO>({ url: '/api/approval/start', method: 'post', data }),
+  batchApprove: (data: { taskIds: string[]; comment?: string; signatureUrl?: string }) =>
+    request<void>({ url: '/api/approval/batch-approve', method: 'post', data }),
+  batchReject: (data: { taskIds: string[]; comment?: string }) =>
+    request<void>({ url: '/api/approval/batch-reject', method: 'post', data }),
+  markCcRead: (taskId: number) =>
+    request<void>({ url: '/api/notify/log/read', method: 'post', data: { taskId } })
+}
+
+export const notifyApi = {
+  templateList: (params?: any) =>
+    request<PageResult<any>>({ url: '/notify/template/list', method: 'get', params }),
+  templateGet: (id: number) => request<any>({ url: `/notify/template/${id}`, method: 'get' }),
+  templateSave: (data: any) => request<any>({ url: '/notify/template', method: 'post', data }),
+  templateUpdate: (data: any) => request<any>({ url: '/notify/template', method: 'put', data }),
+  templateRemove: (id: number) => request<void>({ url: `/notify/template/${id}`, method: 'delete' }),
+  logList: (params?: any) => request<PageResult<any>>({ url: '/notify/log/list', method: 'get', params }),
+  logGet: (id: number) => request<any>({ url: `/notify/log/${id}`, method: 'get' })
+}
+
+const api = {
+  auth: authApi,
+  user: userApi,
+  role: roleApi,
+  menu: menuApi,
+  dept: deptApi,
+  process: processApi,
+  form: formApi,
+  approval: approvalApi,
+  notify: notifyApi
+}
+
+export default api

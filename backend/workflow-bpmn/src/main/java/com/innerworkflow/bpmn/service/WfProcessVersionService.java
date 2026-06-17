@@ -14,6 +14,8 @@ public interface WfProcessVersionService {
 
     WfProcessVersion getByVersion(Long processDefinitionId, Integer version);
 
+    WfProcessVersion getByFlowableProcessDefId(String flowableProcessDefId);
+
     boolean save(WfProcessVersion processVersion);
 
     boolean updateById(WfProcessVersion processVersion);

@@ -14,6 +14,9 @@ import com.innerworkflow.common.enums.*;
 import com.innerworkflow.common.exception.BusinessException;
 import com.innerworkflow.common.util.JsonUtils;
 import com.innerworkflow.common.util.SecurityUtils;
+import com.innerworkflow.notify.dto.NotifySendDTO;
+import com.innerworkflow.notify.enums.EventTypeEnum;
+import com.innerworkflow.notify.service.WfNotifyService;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +31,7 @@ import org.flowable.engine.repository.ProcessDefinition;
 import org.flowable.engine.runtime.ProcessInstance;
 import org.flowable.task.api.Task;
 import org.flowable.task.api.history.HistoricTaskInstance;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -57,6 +61,7 @@ public class WfApprovalServiceImpl implements WfApprovalService {
     private final WfProcessDefinitionService processDefinitionService;
     private final WfProcessVersionService processVersionService;
     private final WfNodeConfigService nodeConfigService;
+    private final WfNotifyService notifyService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -82,6 +87,12 @@ public class WfApprovalServiceImpl implements WfApprovalService {
         variables.put("instanceNo", instanceNo);
         variables.put("title", dto.getTitle());
         variables.put("formData", dto.getFormData());
+
+        if (dto.getFormData() != null && !dto.getFormData().isEmpty()) {
+            for (Map.Entry<String, Object> entry : dto.getFormData().entrySet()) {
+                variables.put(entry.getKey(), entry.getValue());
+            }
+        }
 
         ProcessInstance flowableInstance = runtimeService.startProcessInstanceById(
                 currentVersion.getFlowableProcessDefId(),
@@ -171,6 +182,8 @@ public class WfApprovalServiceImpl implements WfApprovalService {
                 dto.getAttachmentIds(), ChronoUnit.MILLIS.between(approvalTask.getAssignTime(), LocalDateTime.now()),
                 LocalDateTime.now());
 
+        syncTasksFromFlowable(approvalTask.getInstanceId(), task.getProcessInstanceId());
+
         updateInstanceStatus(task.getProcessInstanceId());
 
         log.info("审批同意, taskId={}, instanceId={}, userId={}", dto.getTaskId(), task.getProcessInstanceId(), userId);
@@ -217,6 +230,8 @@ public class WfApprovalServiceImpl implements WfApprovalService {
                 null, null, null, null, dto.getActionRemark(), dto.getSignatureUrl(),
                 dto.getAttachmentIds(), ChronoUnit.MILLIS.between(approvalTask.getAssignTime(), LocalDateTime.now()),
                 LocalDateTime.now());
+
+        syncTasksFromFlowable(approvalTask.getInstanceId(), task.getProcessInstanceId());
 
         updateInstanceStatus(task.getProcessInstanceId());
 
@@ -607,9 +622,36 @@ public class WfApprovalServiceImpl implements WfApprovalService {
                 .processInstanceId(flowableInstanceId)
                 .list();
 
+        WfProcessInstance instance = processInstanceService.getById(instanceId);
+        if (instance != null) {
+            List<String> currentNodeIds = new ArrayList<>();
+            List<Long> currentApproverIds = new ArrayList<>();
+
+            for (Task task : tasks) {
+                if (!currentNodeIds.contains(task.getTaskDefinitionKey())) {
+                    currentNodeIds.add(task.getTaskDefinitionKey());
+                }
+                Long assigneeId = parseAssigneeId(task.getAssignee());
+                if (assigneeId != null && !currentApproverIds.contains(assigneeId)) {
+                    currentApproverIds.add(assigneeId);
+                }
+            }
+            instance.setCurrentNodeIds(currentNodeIds);
+            instance.setCurrentApproverIds(currentApproverIds);
+            processInstanceService.updateById(instance);
+            log.info("同步流程实例状态, instanceId={}, currentNodeIds={}, currentApproverIds={}",
+                    instanceId, currentNodeIds, currentApproverIds);
+        }
+
         for (Task task : tasks) {
             WfApprovalTask existingTask = approvalTaskService.getByFlowableTaskId(task.getId());
             if (existingTask != null) {
+                Long assigneeId = parseAssigneeId(task.getAssignee());
+                if (assigneeId != null && !assigneeId.equals(existingTask.getAssigneeId())) {
+                    existingTask.setAssigneeId(assigneeId);
+                    existingTask.setAssignTime(LocalDateTime.now());
+                    approvalTaskService.updateById(existingTask);
+                }
                 continue;
             }
 
@@ -622,11 +664,24 @@ public class WfApprovalServiceImpl implements WfApprovalService {
             approvalTask.setNodeId(task.getTaskDefinitionKey());
             approvalTask.setNodeName(task.getName());
             approvalTask.setNodeType(1);
-            approvalTask.setAssigneeId(task.getAssignee() != null ? Long.valueOf(task.getAssignee()) : null);
+            approvalTask.setAssigneeId(parseAssigneeId(task.getAssignee()));
             approvalTask.setAssignTime(LocalDateTime.now());
             approvalTask.setTaskStatus(TaskStatusEnum.PENDING.getCode());
             approvalTask.setSourceType(1);
+            approvalTask.setEscalateLevel(0);
             approvalTaskService.save(approvalTask);
+            log.info("同步创建待办任务, flowableTaskId={}, instanceId={}", task.getId(), instanceId);
+        }
+    }
+
+    private Long parseAssigneeId(String assignee) {
+        if (StrUtil.isBlank(assignee)) {
+            return null;
+        }
+        try {
+            return Long.parseLong(assignee);
+        } catch (NumberFormatException e) {
+            return null;
         }
     }
 

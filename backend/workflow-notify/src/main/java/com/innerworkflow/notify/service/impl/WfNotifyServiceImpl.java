@@ -1,12 +1,20 @@
 package com.innerworkflow.notify.service.impl;
 
 import cn.hutool.core.util.StrUtil;
+import com.innerworkflow.approval.entity.WfApprovalTask;
+import com.innerworkflow.approval.entity.WfProcessInstance;
+import com.innerworkflow.approval.service.WfApprovalTaskService;
+import com.innerworkflow.approval.service.WfProcessInstanceService;
+import com.innerworkflow.auth.entity.SysUser;
+import com.innerworkflow.auth.service.SysUserService;
 import com.innerworkflow.common.exception.BusinessException;
 import com.innerworkflow.common.util.IdGenerator;
 import com.innerworkflow.common.util.JsonUtils;
+import com.innerworkflow.common.util.SpringContextHolder;
 import com.innerworkflow.notify.dto.NotifySendDTO;
 import com.innerworkflow.notify.entity.WfMessageLog;
 import com.innerworkflow.notify.entity.WfMessageTemplate;
+import com.innerworkflow.notify.enums.ChannelTypeEnum;
 import com.innerworkflow.notify.enums.SendStatusEnum;
 import com.innerworkflow.notify.sender.MessageSender;
 import com.innerworkflow.notify.service.WfMessageLogService;
@@ -18,6 +26,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -54,17 +63,25 @@ public class WfNotifyServiceImpl implements WfNotifyService {
     }
 
     @Override
+    @Async
     public void sendNotify(NotifySendDTO sendDTO) {
-        List<WfMessageLog> messageLogs = createMessageLogs(sendDTO);
-        for (WfMessageLog messageLog : messageLogs) {
-            try {
-                String messageJson = JsonUtils.toJsonString(messageLog);
-                kafkaTemplate.send(notifyTopic, messageLog.getId().toString(), messageJson);
-                log.debug("通知消息已发送到Kafka, messageNo: {}", messageLog.getMessageNo());
-            } catch (Exception e) {
-                log.error("发送通知消息到Kafka失败, messageNo: {}, error: {}",
-                        messageLog.getMessageNo(), e.getMessage(), e);
+        try {
+            List<WfMessageLog> messageLogs = createMessageLogs(sendDTO);
+            for (WfMessageLog messageLog : messageLogs) {
+                try {
+                    String messageJson = JsonUtils.toJsonString(messageLog);
+                    kafkaTemplate.send(notifyTopic, messageLog.getId().toString(), messageJson);
+                    log.debug("通知消息已发送到Kafka, messageNo: {}, channel: {}",
+                            messageLog.getMessageNo(), messageLog.getChannelType());
+                } catch (Exception e) {
+                    log.error("发送通知消息到Kafka失败, messageNo: {}, error: {}",
+                            messageLog.getMessageNo(), e.getMessage(), e);
+                    handleSendFailureWithUpdate(messageLog, e.getMessage());
+                }
             }
+        } catch (Exception e) {
+            log.error("发送通知失败, eventType: {}, receiverUserId: {}, error: {}",
+                    sendDTO.getEventType(), sendDTO.getReceiverUserId(), e.getMessage(), e);
         }
     }
 
@@ -108,8 +125,50 @@ public class WfNotifyServiceImpl implements WfNotifyService {
             return result;
         }
 
+        SysUser receiverUser = resolveReceiverUser(sendDTO.getReceiverUserId());
+        SysUser startUser = null;
+        SysUser approverUser = null;
+        WfProcessInstance instance = null;
+        WfApprovalTask task = null;
+
+        if (sendDTO.getInstanceId() != null) {
+            try {
+                WfProcessInstanceService instanceService =
+                        SpringContextHolder.getBean(WfProcessInstanceService.class);
+                if (instanceService != null) {
+                    instance = instanceService.getById(sendDTO.getInstanceId());
+                    if (instance != null && instance.getStartUserId() != null) {
+                        startUser = resolveReceiverUser(instance.getStartUserId());
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("查询流程实例信息失败, instanceId={}, error={}",
+                        sendDTO.getInstanceId(), e.getMessage());
+            }
+        }
+
+        if (sendDTO.getTaskId() != null) {
+            try {
+                WfApprovalTaskService taskService =
+                        SpringContextHolder.getBean(WfApprovalTaskService.class);
+                if (taskService != null) {
+                    task = taskService.getById(sendDTO.getTaskId());
+                    if (task != null && task.getAssigneeId() != null) {
+                        approverUser = resolveReceiverUser(task.getAssigneeId());
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("查询审批任务信息失败, taskId={}, error={}",
+                        sendDTO.getTaskId(), e.getMessage());
+            }
+        }
+
+        Map<String, Object> enrichedParams = enrichParams(
+                sendDTO.getParams(), instance, task, receiverUser, startUser, approverUser);
+
         for (String channelType : channelTypes) {
-            WfMessageLog messageLog = buildMessageLog(sendDTO, template, channelType);
+            WfMessageLog messageLog = buildMessageLog(
+                    sendDTO, template, channelType, enrichedParams, receiverUser);
             messageLogService.save(messageLog);
             result.add(messageLog);
         }
@@ -117,7 +176,85 @@ public class WfNotifyServiceImpl implements WfNotifyService {
         return result;
     }
 
-    private WfMessageLog buildMessageLog(NotifySendDTO sendDTO, WfMessageTemplate template, String channelType) {
+    private SysUser resolveReceiverUser(Long userId) {
+        if (userId == null) {
+            return null;
+        }
+        try {
+            SysUserService userService = SpringContextHolder.getBean(SysUserService.class);
+            if (userService != null) {
+                return userService.getById(userId);
+            }
+        } catch (Exception e) {
+            log.warn("查询用户信息失败, userId={}, error={}", userId, e.getMessage());
+        }
+        return null;
+    }
+
+    private Map<String, Object> enrichParams(Map<String, Object> originalParams,
+                                             WfProcessInstance instance,
+                                             WfApprovalTask task,
+                                             SysUser receiverUser,
+                                             SysUser startUser,
+                                             SysUser approverUser) {
+        Map<String, Object> result = new HashMap<>();
+        if (originalParams != null) {
+            result.putAll(originalParams);
+        }
+
+        if (receiverUser != null) {
+            result.putIfAbsent("receiverUserName", receiverUser.getRealName());
+            result.putIfAbsent("receiverUserNickName", receiverUser.getNickName());
+            result.putIfAbsent("receiverUserEmail", receiverUser.getEmail());
+            result.putIfAbsent("receiverUserPhone", receiverUser.getPhone());
+        }
+
+        if (startUser != null) {
+            result.putIfAbsent("startUserName", startUser.getRealName());
+            result.putIfAbsent("startUserNickName", startUser.getNickName());
+            result.putIfAbsent("startUserDeptId", startUser.getDeptId());
+        }
+
+        if (approverUser != null) {
+            result.putIfAbsent("approverUserName", approverUser.getRealName());
+            result.putIfAbsent("approverUserNickName", approverUser.getNickName());
+        }
+
+        if (instance != null) {
+            result.putIfAbsent("processTitle", instance.getTitle());
+            result.putIfAbsent("instanceNo", instance.getInstanceNo());
+            result.putIfAbsent("processKey", instance.getProcessKey());
+            result.putIfAbsent("instanceId", instance.getId());
+            result.putIfAbsent("startUserId", instance.getStartUserId());
+            if (instance.getStartTime() != null) {
+                result.putIfAbsent("startTime", instance.getStartTime().toString());
+            }
+            if (instance.getEndTime() != null) {
+                result.putIfAbsent("endTime", instance.getEndTime().toString());
+            }
+            if (instance.getDuration() != null) {
+                result.putIfAbsent("duration", instance.getDuration());
+            }
+        }
+
+        if (task != null) {
+            result.putIfAbsent("taskId", task.getId());
+            result.putIfAbsent("nodeId", task.getNodeId());
+            result.putIfAbsent("nodeName", task.getNodeName());
+            if (task.getAssignTime() != null) {
+                result.putIfAbsent("assignTime", task.getAssignTime().toString());
+            }
+            if (task.getDueTime() != null) {
+                result.putIfAbsent("dueTime", task.getDueTime().toString());
+            }
+        }
+
+        return result;
+    }
+
+    private WfMessageLog buildMessageLog(NotifySendDTO sendDTO, WfMessageTemplate template,
+                                         String channelType, Map<String, Object> params,
+                                         SysUser receiverUser) {
         WfMessageLog messageLog = new WfMessageLog();
         messageLog.setMessageNo(generateMessageNo());
         messageLog.setTemplateId(template != null ? template.getId() : null);
@@ -127,8 +264,12 @@ public class WfNotifyServiceImpl implements WfNotifyService {
         messageLog.setTaskId(sendDTO.getTaskId());
         messageLog.setChannelType(channelType);
         messageLog.setReceiverUserId(sendDTO.getReceiverUserId());
-        messageLog.setReceiverAccount(sendDTO.getReceiverAccount());
-        messageLog.setMessageParams(sendDTO.getParams());
+
+        String receiverAccount = resolveReceiverAccount(sendDTO.getReceiverAccount(),
+                receiverUser, channelType);
+        messageLog.setReceiverAccount(receiverAccount);
+
+        messageLog.setMessageParams(params);
         messageLog.setSendStatus(SendStatusEnum.PENDING.getCode());
         messageLog.setRetryCount(0);
         messageLog.setMaxRetry(sendDTO.getMaxRetry() != null ? sendDTO.getMaxRetry() : defaultMaxRetry);
@@ -139,19 +280,25 @@ public class WfNotifyServiceImpl implements WfNotifyService {
         String title = "";
         String content = "";
         if (template != null) {
-            if ("EMAIL".equals(channelType)) {
+            if (ChannelTypeEnum.EMAIL.getCode().equals(channelType)) {
                 title = template.getEmailSubjectTemplate() != null ? template.getEmailSubjectTemplate() : "";
                 content = template.getEmailContentTemplate() != null ? template.getEmailContentTemplate() : "";
-            } else if ("SMS".equals(channelType)) {
+            } else if (ChannelTypeEnum.SMS.getCode().equals(channelType)) {
                 content = template.getSmsTemplateId() != null ? template.getSmsTemplateId() : "";
+            } else if (ChannelTypeEnum.DINGTALK.getCode().equals(channelType)) {
+                content = template.getDingTemplateId() != null ? template.getDingTemplateId() : "";
+                title = template.getTemplateName() != null ? template.getTemplateName() : "";
+            } else if (ChannelTypeEnum.WECOM.getCode().equals(channelType)) {
+                content = template.getWecomTemplateId() != null ? template.getWecomTemplateId() : "";
+                title = template.getTemplateName() != null ? template.getTemplateName() : "";
             } else {
-                content = template.getTemplateName();
+                content = template.getTemplateName() != null ? template.getTemplateName() : "";
             }
         }
 
-        if (sendDTO.getParams() != null && !sendDTO.getParams().isEmpty()) {
-            title = templateEngine.process(title, sendDTO.getParams());
-            content = templateEngine.process(content, sendDTO.getParams());
+        if (params != null && !params.isEmpty()) {
+            title = templateEngine.process(title, params);
+            content = templateEngine.process(content, params);
         }
 
         messageLog.setMessageTitle(title);
@@ -160,9 +307,35 @@ public class WfNotifyServiceImpl implements WfNotifyService {
         return messageLog;
     }
 
+    private String resolveReceiverAccount(String defaultAccount, SysUser receiverUser, String channelType) {
+        if (StrUtil.isNotBlank(defaultAccount)) {
+            return defaultAccount;
+        }
+        if (receiverUser == null) {
+            return null;
+        }
+        if (ChannelTypeEnum.EMAIL.getCode().equals(channelType)) {
+            return receiverUser.getEmail();
+        } else if (ChannelTypeEnum.SMS.getCode().equals(channelType)) {
+            return receiverUser.getPhone();
+        } else if (ChannelTypeEnum.DINGTALK.getCode().equals(channelType)) {
+            return receiverUser.getDingUserId();
+        } else if (ChannelTypeEnum.WECOM.getCode().equals(channelType)) {
+            return receiverUser.getWecomUserId();
+        }
+        return receiverUser.getUsername();
+    }
+
     @Override
     public void processMessageLog(WfMessageLog messageLog) {
         if (messageLog == null) {
+            return;
+        }
+
+        if (StrUtil.isBlank(messageLog.getReceiverAccount())) {
+            log.warn("接收账号为空，跳过发送, messageNo: {}, channelType: {}",
+                    messageLog.getMessageNo(), messageLog.getChannelType());
+            updateSendStatus(messageLog, SendStatusEnum.FAILED, null, "接收账号为空");
             return;
         }
 
@@ -191,30 +364,41 @@ public class WfNotifyServiceImpl implements WfNotifyService {
 
             if (success) {
                 updateSendStatus(messageLog, SendStatusEnum.SUCCESS, null, null);
-                log.info("消息发送成功, messageNo: {}, channel: {}",
-                        messageLog.getMessageNo(), messageLog.getChannelType());
+                log.info("消息发送成功, messageNo: {}, channel: {}, receiver: {}",
+                        messageLog.getMessageNo(), messageLog.getChannelType(),
+                        maskReceiverAccount(messageLog.getReceiverAccount()));
             } else {
-                handleSendFailure(messageLog, "发送失败");
+                handleSendFailureWithUpdate(messageLog, "发送失败");
             }
         } catch (Exception e) {
             log.error("消息发送异常, messageNo: {}, error: {}",
                     messageLog.getMessageNo(), e.getMessage(), e);
-            handleSendFailure(messageLog, e.getMessage());
+            handleSendFailureWithUpdate(messageLog, e.getMessage());
         }
     }
 
-    private void handleSendFailure(WfMessageLog messageLog, String failReason) {
+    private String maskReceiverAccount(String account) {
+        if (StrUtil.isBlank(account)) {
+            return "";
+        }
+        if (account.length() <= 4) {
+            return "***";
+        }
+        return account.substring(0, 2) + "***" + account.substring(account.length() - 2);
+    }
+
+    private void handleSendFailureWithUpdate(WfMessageLog messageLog, String failReason) {
         int retryCount = messageLog.getRetryCount() + 1;
         messageLog.setRetryCount(retryCount);
 
         if (retryCount >= messageLog.getMaxRetry()) {
             updateSendStatus(messageLog, SendStatusEnum.FAILED, null, failReason);
-            log.warn("消息发送达到最大重试次数, messageNo: {}, retryCount: {}",
-                    messageLog.getMessageNo(), retryCount);
+            log.warn("消息发送达到最大重试次数, messageNo: {}, retryCount: {}, reason: {}",
+                    messageLog.getMessageNo(), retryCount, failReason);
         } else {
             updateSendStatus(messageLog, SendStatusEnum.PENDING, null, failReason);
-            log.info("消息发送失败，等待重试, messageNo: {}, retryCount: {}",
-                    messageLog.getMessageNo(), retryCount);
+            log.info("消息发送失败，等待重试, messageNo: {}, retryCount: {}, reason: {}",
+                    messageLog.getMessageNo(), retryCount, failReason);
         }
     }
 
@@ -231,10 +415,16 @@ public class WfNotifyServiceImpl implements WfNotifyService {
             messageLog.setFailReason(failReason);
         }
         messageLog.setUpdateTime(LocalDateTime.now());
-        messageLogService.updateById(messageLog);
+        try {
+            messageLogService.updateById(messageLog);
+        } catch (Exception e) {
+            log.error("更新消息日志状态失败, messageNo: {}, error: {}",
+                    messageLog.getMessageNo(), e.getMessage(), e);
+        }
     }
 
     @Override
+    @Async
     public void retryFailedMessages() {
         List<WfMessageLog> pendingList = messageLogService.getPendingRetryList(100);
         log.info("开始重试失败消息，共{}条", pendingList.size());

@@ -42,6 +42,13 @@ public class WfProcessVersionServiceImpl extends ServiceImpl<WfProcessVersionMap
     }
 
     @Override
+    public WfProcessVersion getByFlowableProcessDefId(String flowableProcessDefId) {
+        LambdaQueryWrapper<WfProcessVersion> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(WfProcessVersion::getFlowableProcessDefId, flowableProcessDefId);
+        return this.getOne(wrapper);
+    }
+
+    @Override
     public boolean save(WfProcessVersion processVersion) {
         return super.save(processVersion);
     }

@@ -18,6 +18,20 @@ public class WfProcessDesignSaveDTO implements Serializable {
     @NotNull(message = "流程定义ID不能为空")
     private Long processDefinitionId;
 
+    @NotBlank(message = "流程Key不能为空")
+    private String processKey;
+
+    @NotBlank(message = "流程名称不能为空")
+    private String processName;
+
+    private Long businessLineId;
+
+    private Long categoryId;
+
+    private String description;
+
+    private Long formId;
+
     @NotBlank(message = "BPMN XML不能为空")
     private String bpmnXml;
 
