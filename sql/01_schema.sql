@@ -634,3 +634,33 @@ CREATE TABLE IF NOT EXISTS `wf_attachment` (
     KEY `idx_biz` (`biz_type`, `biz_id`),
     KEY `idx_upload_user` (`upload_user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='附件信息表';
+
+-- ============================================================
+-- 8. AI智能审批相关表
+-- ============================================================
+
+-- AI审批推荐记录表
+CREATE TABLE IF NOT EXISTS `wf_ai_recommendation` (
+    `id` BIGINT NOT NULL,
+    `task_id` BIGINT NOT NULL,
+    `instance_id` BIGINT NOT NULL,
+    `approver_id` BIGINT NOT NULL,
+    `approve_probability` DOUBLE DEFAULT NULL,
+    `recommended_action` TINYINT DEFAULT NULL,
+    `reason` VARCHAR(500) DEFAULT NULL,
+    `factors_json` TEXT DEFAULT NULL,
+    `model_version` VARCHAR(50) DEFAULT NULL,
+    `inference_ms` BIGINT DEFAULT NULL,
+    `adopted` TINYINT DEFAULT 0,
+    `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP,
+    `action_time` DATETIME DEFAULT NULL,
+    `tenant_id` BIGINT DEFAULT NULL,
+    PRIMARY KEY (`id`),
+    KEY `idx_task_id` (`task_id`),
+    KEY `idx_instance_id` (`instance_id`),
+    KEY `idx_approver_id` (`approver_id`),
+    KEY `idx_tenant_id` (`tenant_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI审批推荐记录表';
+
+-- 审批任务表增加AI推荐ID字段
+ALTER TABLE `wf_approval_task` ADD COLUMN `ai_recommendation_id` BIGINT DEFAULT NULL COMMENT 'AI推荐ID' AFTER `escalate_level`;

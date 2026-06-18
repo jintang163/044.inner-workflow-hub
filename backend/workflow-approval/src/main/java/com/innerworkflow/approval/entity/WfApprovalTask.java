@@ -74,6 +74,8 @@ public class WfApprovalTask implements Serializable {
 
     private Integer escalateLevel;
 
+    private Long aiRecommendationId;
+
     private Long tenantId;
 
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")

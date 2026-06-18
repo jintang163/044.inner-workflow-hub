@@ -158,6 +158,7 @@ export interface WfApprovalHistoryVO {
 }
 
 export * from './form'
+export * from './ai'
 
 export interface NodeConfig {
   nodeId: string

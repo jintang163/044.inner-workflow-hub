@@ -39,6 +39,10 @@ import {
   TenantRoleVO,
   TenantRoleSaveDTO
 } from '@/types/tenant'
+import {
+  AiRecommendationVO,
+  AiStatsVO
+} from '@/types/ai'
 
 export const authApi = {
   login: (data: LoginDTO) => request<LoginVO>({ url: '/auth/login', method: 'post', data }),
@@ -227,6 +231,17 @@ export const tenantApi = {
     request<void>({ url: '/tenant/role/remove-user', method: 'delete', params: { tenantId, userId, tenantRoleId } })
 }
 
+export const aiApi = {
+  getRecommendation: (taskId: number) =>
+    request<AiRecommendationVO>({ url: `/ai/recommendation/${taskId}`, method: 'get' }),
+  recordAdoption: (recommendationId: number, adopted: number) =>
+    request<void>({ url: `/ai/adoption/${recommendationId}`, method: 'post', params: { adopted } }),
+  getStats: () =>
+    request<AiStatsVO>({ url: '/ai/stats', method: 'get' }),
+  triggerTraining: () =>
+    request<void>({ url: '/ai/trigger-training', method: 'post' })
+}
+
 const api = {
   auth: authApi,
   user: userApi,
@@ -237,7 +252,8 @@ const api = {
   form: formApi,
   approval: approvalApi,
   notify: notifyApi,
-  tenant: tenantApi
+  tenant: tenantApi,
+  ai: aiApi
 }
 
 export default api

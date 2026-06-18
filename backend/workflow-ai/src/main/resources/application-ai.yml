@@ -1,0 +1,4 @@
+grpc:
+  ai-service:
+    host: localhost
+    port: 50051

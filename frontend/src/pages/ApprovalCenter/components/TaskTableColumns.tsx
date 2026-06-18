@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react'
-import { Avatar, Tag, Tooltip, Button, Space, Typography, message } from 'antd'
-import { CopyOutlined, CheckCircleOutlined, ClockCircleOutlined, UserOutlined } from '@ant-design/icons'
+import { Avatar, Tag, Tooltip, Button, Space, Typography, message, Progress } from 'antd'
+import { CopyOutlined, CheckCircleOutlined, ClockCircleOutlined, UserOutlined, BulbOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import type { ColumnsType } from 'antd/es/table'
 import type { ApprovalTaskVO, Priority } from '@/types/approval'
+import type { AiRecommendationVO } from '@/types/ai'
 
 const { Text } = Typography
 
@@ -186,6 +187,44 @@ export const getTodoColumns = (options: TodoColumnsOptions): ColumnsType<Approva
       width: 70,
       align: 'center',
       render: (priority: Priority) => getPriorityTag(priority)
+    },
+    {
+      title: 'AI推荐',
+      dataIndex: 'aiRecommendation',
+      width: 110,
+      align: 'center',
+      render: (rec: AiRecommendationVO, record) => {
+        if (!rec || record.taskStatus !== 'PENDING') {
+          return <Tag color="default">待计算</Tag>
+        }
+        const isApprove = rec.recommendedAction === 1
+        const probability = Math.round((rec.approveProbability || 0) * 100)
+        const isAdopted = rec.adopted === 1
+        const isIgnored = rec.adopted === 2
+        return (
+          <Tooltip
+            title={
+              <div style={{ maxWidth: 240 }}>
+                <div style={{ marginBottom: 4, fontWeight: 600 }}>
+                  {isApprove ? '建议同意' : '建议拒绝'} · {probability}%
+                </div>
+                {rec.reason && <div style={{ color: '#d9d9d9' }}>{rec.reason}</div>}
+                {isAdopted && <div style={{ color: '#52c41a', marginTop: 4 }}>✓ 已采纳</div>}
+                {isIgnored && <div style={{ color: '#8c8c8c', marginTop: 4 }}>— 已忽略</div>}
+              </div>
+            }
+          >
+            <Space size={4} direction="vertical" style={{ width: '100%' }}>
+              <Tag color={isApprove ? 'success' : 'error'} style={{ margin: 0 }}>
+                <BulbOutlined style={{ marginRight: 2 }} />
+                {isApprove ? '同意' : '拒绝'} {probability}%
+              </Tag>
+              {isAdopted && <Tag color="green" style={{ margin: 0 }}>已采纳</Tag>}
+              {isIgnored && <Tag color="default" style={{ margin: 0 }}>已忽略</Tag>}
+            </Space>
+          </Tooltip>
+        )
+      }
     },
     {
       title: '审批单号',

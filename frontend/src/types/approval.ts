@@ -50,6 +50,8 @@ export interface ApprovalTaskVO {
   canWithdraw?: boolean
   needSignature: boolean
   needComment: boolean
+  aiRecommendation?: import('./ai').AiRecommendationVO
+  aiRecommendationId?: number
 }
 
 export interface ApprovalHistoryVO {

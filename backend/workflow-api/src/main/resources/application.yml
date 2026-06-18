@@ -126,7 +126,7 @@ flowable:
 
 mybatis-plus:
   mapper-locations: classpath*:mapper/**/*.xml
-  type-aliases-package: com.innerworkflow.common.entity;com.innerworkflow.auth.entity;com.innerworkflow.bpmn.entity;com.innerworkflow.form.entity;com.innerworkflow.approval.entity;com.innerworkflow.notify.entity
+  type-aliases-package: com.innerworkflow.common.entity;com.innerworkflow.auth.entity;com.innerworkflow.bpmn.entity;com.innerworkflow.form.entity;com.innerworkflow.approval.entity;com.innerworkflow.notify.entity;com.innerworkflow.ai.entity
   configuration:
     map-underscore-to-camel-case: true
     cache-enabled: false

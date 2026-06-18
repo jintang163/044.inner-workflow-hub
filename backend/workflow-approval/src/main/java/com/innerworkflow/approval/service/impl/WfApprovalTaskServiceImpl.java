@@ -12,20 +12,26 @@ import com.innerworkflow.approval.mapper.WfApprovalTaskMapper;
 import com.innerworkflow.approval.service.WfApprovalTaskService;
 import com.innerworkflow.approval.service.WfProcessInstanceService;
 import com.innerworkflow.approval.vo.WfApprovalTaskVO;
+import com.innerworkflow.ai.dto.ApprovalAiFeaturesDTO;
+import com.innerworkflow.ai.service.AiRecommendationService;
+import com.innerworkflow.ai.vo.AiRecommendationVO;
 import com.innerworkflow.common.enums.TaskStatusEnum;
 import com.innerworkflow.common.util.SecurityUtils;
 import cn.hutool.core.util.StrUtil;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class WfApprovalTaskServiceImpl extends ServiceImpl<WfApprovalTaskMapper, WfApprovalTask> implements WfApprovalTaskService {
 
     private final WfProcessInstanceService processInstanceService;
+    private final AiRecommendationService aiRecommendationService;
 
     @Override
     public IPage<WfApprovalTaskVO> pageTodo(WfTodoTaskQueryDTO queryDTO) {
@@ -118,6 +124,19 @@ public class WfApprovalTaskServiceImpl extends ServiceImpl<WfApprovalTaskMapper,
             vo.setStartUserId(instance.getStartUserId());
             vo.setInstanceNo(instance.getInstanceNo());
         }
+
+        if (TaskStatusEnum.PENDING.getCode().equals(task.getTaskStatus())) {
+            try {
+                AiRecommendationVO rec = aiRecommendationService.getRecommendation(task.getId());
+                if (rec != null) {
+                    vo.setAiRecommendation(rec);
+                    vo.setAiRecommendationId(rec.getId());
+                }
+            } catch (Exception e) {
+                log.debug("AI推荐获取失败, taskId={}, error={}", task.getId(), e.getMessage());
+            }
+        }
+
         return vo;
     }
 }

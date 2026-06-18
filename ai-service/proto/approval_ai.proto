@@ -1,0 +1,61 @@
+syntax = "proto3";
+
+package innerworkflow.ai.v1;
+
+import "google/protobuf/empty.proto";
+
+message ApprovalFeatures {
+    string instance_id = 1;
+    double amount = 2;
+    int64 department_id = 3;
+    int64 initiator_id = 4;
+    int32 initiator_level = 5;
+    int64 approver_id = 6;
+    string process_key = 7;
+    int64 business_line_id = 8;
+    int32 priority = 9;
+    string form_data_json = 10;
+}
+
+message Factor {
+    string key = 1;
+    string value = 2;
+    float weight = 3;
+}
+
+message ApprovalRecommendation {
+    float approve_probability = 1;
+    int32 recommended_action = 2;
+    string reason = 3;
+    repeated Factor factors = 4;
+    string model_version = 5;
+    int64 inference_ms = 6;
+}
+
+message TrainingDataItem {
+    string instance_id = 1;
+    double amount = 2;
+    int64 department_id = 3;
+    int64 initiator_id = 4;
+    int32 initiator_level = 5;
+    int64 approver_id = 6;
+    string process_key = 7;
+    int64 business_line_id = 8;
+    int32 priority = 9;
+    string form_data_json = 10;
+    bool approved = 11;
+}
+
+message GetStatsResponse {
+    int64 total_trained_samples = 1;
+    string last_training_time = 2;
+    string current_model_version = 3;
+    float accuracy = 4;
+    map<string, float> feature_importance = 5;
+}
+
+service ApprovalAiService {
+    rpc Predict(ApprovalFeatures) returns (ApprovalRecommendation);
+    rpc Train(stream TrainingDataItem) returns (google.protobuf.Empty);
+    rpc GetStats(google.protobuf.Empty) returns (GetStatsResponse);
+}

@@ -18,7 +18,9 @@ import {
   Modal,
   Form,
   Input,
-  List
+  List,
+  Divider,
+  Alert
 } from 'antd'
 import {
   ArrowLeftOutlined,
@@ -31,8 +33,10 @@ import {
 import ApprovalTimeline from './components/ApprovalTimeline'
 import FlowDiagram from './components/FlowDiagram'
 import ApprovalActionBar from './components/ApprovalActionBar'
-import { approvalApi } from '@/api'
+import AiRecommendationCard from '@/components/business/AiRecommendationCard'
+import { approvalApi, aiApi } from '@/api'
 import type { ProcessInstanceVO, ApprovalHistoryVO, ApprovalTaskVO } from '@/types/approval'
+import type { AiRecommendationVO } from '@/types/ai'
 import dayjs from 'dayjs'
 
 const { Text, Title, Paragraph } = Typography
@@ -220,7 +224,29 @@ const mockCurrentTask: ApprovalTaskVO = {
   startUserName: '张三',
   startDeptName: '技术研发部',
   startTime: dayjs().subtract(2, 'day').format('YYYY-MM-DD HH:mm:ss'),
-  formData: {},
+  formData: { amount: 2500 },
+  aiRecommendation: {
+    id: 100001,
+    taskId: 10001,
+    instanceId: 50001,
+    approverId: 1,
+    approveProbability: 0.91,
+    recommendedAction: 1,
+    reason: '金额低，该部门历史审批通过率高，建议同意',
+    factors: [
+      { key: 'amount_level', value: '低', weight: 0.35 },
+      { key: 'department_rate', value: '92%', weight: 0.28 },
+      { key: 'approver_approval_rate', value: '88%', weight: 0.2 },
+      { key: 'process_type', value: '年假申请', weight: 0.1 },
+      { key: 'initiator_level_rate', value: '良好', weight: 0.07 }
+    ],
+    factorsJson: '',
+    modelVersion: 'v1.0.0',
+    inferenceMs: 52,
+    adopted: 0,
+    createTime: dayjs().subtract(1, 'day').add(8, 'hour').add(2, 'minute').format('YYYY-MM-DD HH:mm:ss')
+  },
+  aiRecommendationId: 100001,
   canAddSign: true,
   canTransfer: true,
   canDelegate: true,
@@ -248,6 +274,7 @@ const ApprovalDetail: React.FC = () => {
   const [activeTab, setActiveTab] = useState('form')
   const [withdrawForm] = Form.useForm()
   const [withdrawOpen, setWithdrawOpen] = useState(false)
+  const [aiRecommendation, setAiRecommendation] = useState<AiRecommendationVO | null>(null)
 
   const instanceNo = id || ''
 
@@ -269,10 +296,13 @@ const ApprovalDetail: React.FC = () => {
       setHistory(mockHistory())
       if (passedTask) {
         setCurrentTask(passedTask)
+        setAiRecommendation(passedTask.aiRecommendation || null)
       } else if (hasPendingTask) {
         setCurrentTask(mockCurrentTask)
+        setAiRecommendation(mockCurrentTask.aiRecommendation || null)
       } else {
         setCurrentTask(mockCurrentTask)
+        setAiRecommendation(mockCurrentTask.aiRecommendation || null)
       }
     } catch (err: any) {
       message.error(err?.message || '加载详情失败')
@@ -280,6 +310,14 @@ const ApprovalDetail: React.FC = () => {
       setLoading(false)
     }
   }, [instanceNo, passedTask])
+
+  const handleAiAdopted = (adopted: number) => {
+    setAiRecommendation(prev => prev ? { ...prev, adopted } : null)
+    setCurrentTask(prev => prev && prev.aiRecommendation ? {
+      ...prev,
+      aiRecommendation: { ...prev.aiRecommendation, adopted }
+    } : prev)
+  }
 
   useEffect(() => {
     if (instanceNo) {
@@ -291,6 +329,10 @@ const ApprovalDetail: React.FC = () => {
     if (!currentTask) return
     try {
       setActionLoading(true)
+      if (currentTask.aiRecommendationId && currentTask.aiRecommendation?.adopted === 0) {
+        const isMatch = currentTask.aiRecommendation?.recommendedAction === 1
+        await aiApi.recordAdoption(currentTask.aiRecommendationId, isMatch ? 1 : 2)
+      }
       await approvalApi.approve({
         taskId: currentTask.flowableTaskId,
         instanceId: currentTask.instanceId,
@@ -309,6 +351,10 @@ const ApprovalDetail: React.FC = () => {
     if (!currentTask) return
     try {
       setActionLoading(true)
+      if (currentTask.aiRecommendationId && currentTask.aiRecommendation?.adopted === 0) {
+        const isMatch = currentTask.aiRecommendation?.recommendedAction === 0
+        await aiApi.recordAdoption(currentTask.aiRecommendationId, isMatch ? 1 : 2)
+      }
       await approvalApi.reject({
         taskId: currentTask.flowableTaskId,
         instanceId: currentTask.instanceId,
@@ -588,6 +634,14 @@ const ApprovalDetail: React.FC = () => {
           </Col>
 
           <Col xs={24} lg={17} xl={18}>
+            {hasPendingTask && aiRecommendation && (
+              <AiRecommendationCard
+                recommendation={aiRecommendation}
+                onAdopted={handleAiAdopted}
+                onIgnore={() => handleAiAdopted(2)}
+              />
+            )}
+
             <Card
               style={{ borderRadius: 8 }}
               bodyStyle={{ padding: 0 }}

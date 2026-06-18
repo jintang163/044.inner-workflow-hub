@@ -80,6 +80,10 @@ public class WfApprovalTaskVO implements Serializable {
 
     private Integer escalateLevel;
 
+    private Long aiRecommendationId;
+
+    private com.innerworkflow.ai.vo.AiRecommendationVO aiRecommendation;
+
     private String title;
 
     private Long startUserId;

@@ -17,6 +17,9 @@ import com.innerworkflow.common.util.SecurityUtils;
 import com.innerworkflow.notify.dto.NotifySendDTO;
 import com.innerworkflow.notify.enums.EventTypeEnum;
 import com.innerworkflow.notify.service.WfNotifyService;
+import com.innerworkflow.ai.entity.WfAiRecommendation;
+import com.innerworkflow.ai.mapper.WfAiRecommendationMapper;
+import com.innerworkflow.ai.service.AiRecommendationService;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import lombok.RequiredArgsConstructor;
@@ -62,6 +65,8 @@ public class WfApprovalServiceImpl implements WfApprovalService {
     private final WfProcessVersionService processVersionService;
     private final WfNodeConfigService nodeConfigService;
     private final WfNotifyService notifyService;
+    private final AiRecommendationService aiRecommendationService;
+    private final WfAiRecommendationMapper aiRecommendationMapper;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -186,6 +191,8 @@ public class WfApprovalServiceImpl implements WfApprovalService {
 
         updateInstanceStatus(task.getProcessInstanceId());
 
+        recordAiAdoption(approvalTask, TaskActionEnum.AGREE.getCode());
+
         log.info("审批同意, taskId={}, instanceId={}, userId={}", dto.getTaskId(), task.getProcessInstanceId(), userId);
     }
 
@@ -234,6 +241,8 @@ public class WfApprovalServiceImpl implements WfApprovalService {
         syncTasksFromFlowable(approvalTask.getInstanceId(), task.getProcessInstanceId());
 
         updateInstanceStatus(task.getProcessInstanceId());
+
+        recordAiAdoption(approvalTask, TaskActionEnum.REJECT.getCode());
 
         log.info("审批拒绝, taskId={}, instanceId={}, userId={}", dto.getTaskId(), task.getProcessInstanceId(), userId);
     }
@@ -853,5 +862,24 @@ public class WfApprovalServiceImpl implements WfApprovalService {
         detailVO.setCanTransfer(hasTodoTask);
         detailVO.setCanAddSign(hasTodoTask);
         detailVO.setCanDelegate(hasTodoTask);
+    }
+
+    private void recordAiAdoption(WfApprovalTask task, Integer action) {
+        if (task.getAiRecommendationId() == null) {
+            return;
+        }
+        try {
+            WfAiRecommendation rec = aiRecommendationMapper.selectById(task.getAiRecommendationId());
+            if (rec != null && (rec.getAdopted() == null || rec.getAdopted() == 0)) {
+                Integer adopted = (rec.getRecommendedAction() != null &&
+                        ((rec.getRecommendedAction() == 1 && TaskActionEnum.AGREE.getCode().equals(action)) ||
+                                (rec.getRecommendedAction() == 0 && TaskActionEnum.REJECT.getCode().equals(action))))
+                        ? 1
+                        : 2;
+                aiRecommendationService.recordAdoption(rec.getId(), adopted);
+            }
+        } catch (Exception e) {
+            log.warn("记录AI推荐采纳情况失败, taskId={}, error={}", task.getId(), e.getMessage());
+        }
     }
 }
