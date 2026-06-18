@@ -19,11 +19,17 @@ public interface WfCcTaskService {
 
     List<WfCcTaskVO> listVOByInstanceId(Long instanceId);
 
+    List<WfCcTaskVO> listAllVOsByInstanceId(Long instanceId);
+
+    long countUnreadByInstanceId(Long instanceId);
+
     boolean save(WfCcTask ccTask);
 
     boolean saveBatch(List<WfCcTask> list);
 
     void addCc(WfCcAddDTO addDTO);
+
+    void addCcInternal(WfCcAddDTO addDTO);
 
     boolean markRead(Long id);
 

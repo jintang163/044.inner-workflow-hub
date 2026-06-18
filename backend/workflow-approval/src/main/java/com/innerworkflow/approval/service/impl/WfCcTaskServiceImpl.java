@@ -80,6 +80,11 @@ public class WfCcTaskServiceImpl extends ServiceImpl<WfCcTaskMapper, WfCcTask> i
             throw BusinessException.forbidden("只有发起人可以查看抄送列表");
         }
 
+        return listAllVOsByInstanceId(instanceId);
+    }
+
+    @Override
+    public List<WfCcTaskVO> listAllVOsByInstanceId(Long instanceId) {
         LambdaQueryWrapper<WfCcTask> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(WfCcTask::getInstanceId, instanceId);
         wrapper.orderByDesc(WfCcTask::getCcTime);
@@ -105,6 +110,14 @@ public class WfCcTaskServiceImpl extends ServiceImpl<WfCcTaskMapper, WfCcTask> i
     }
 
     @Override
+    public long countUnreadByInstanceId(Long instanceId) {
+        LambdaQueryWrapper<WfCcTask> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(WfCcTask::getInstanceId, instanceId);
+        wrapper.eq(WfCcTask::getIsRead, 0);
+        return this.count(wrapper);
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public void addCc(WfCcAddDTO addDTO) {
         WfProcessInstance instance = processInstanceService.getById(addDTO.getInstanceId());
@@ -121,8 +134,29 @@ public class WfCcTaskServiceImpl extends ServiceImpl<WfCcTaskMapper, WfCcTask> i
             throw BusinessException.paramError("流程已取消，无法添加抄送");
         }
 
+        doAddCc(addDTO, instance, CcTypeEnum.MANUAL);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void addCcInternal(WfCcAddDTO addDTO) {
+        WfProcessInstance instance = processInstanceService.getById(addDTO.getInstanceId());
+        if (instance == null) {
+            log.warn("内部添加抄送-流程实例不存在, instanceId={}", addDTO.getInstanceId());
+            return;
+        }
+        CcTypeEnum ccType = addDTO.getCcType() != null
+                ? CcTypeEnum.getByCode(addDTO.getCcType())
+                : CcTypeEnum.MANUAL;
+        if (ccType == null) {
+            ccType = CcTypeEnum.MANUAL;
+        }
+        doAddCc(addDTO, instance, ccType);
+    }
+
+    private void doAddCc(WfCcAddDTO addDTO, WfProcessInstance instance, CcTypeEnum ccType) {
         if (addDTO.getCcUserIds() == null || addDTO.getCcUserIds().isEmpty()) {
-            throw BusinessException.paramError("抄送人不能为空");
+            return;
         }
 
         Set<Long> existingCcUserIds = listByInstanceId(addDTO.getInstanceId()).stream()
@@ -135,7 +169,7 @@ public class WfCcTaskServiceImpl extends ServiceImpl<WfCcTaskMapper, WfCcTask> i
                 .collect(Collectors.toList());
 
         if (newCcUserIds.isEmpty()) {
-            log.info("没有需要添加的新抄送人, instanceId={}", addDTO.getInstanceId());
+            log.info("没有需要添加的新抄送人, instanceId={}, ccType={}", addDTO.getInstanceId(), ccType.getName());
             return;
         }
 
@@ -148,7 +182,7 @@ public class WfCcTaskServiceImpl extends ServiceImpl<WfCcTaskMapper, WfCcTask> i
             ccTask.setCcUserId(ccUserId);
             ccTask.setNodeId(addDTO.getNodeId());
             ccTask.setNodeName(addDTO.getNodeName());
-            ccTask.setCcType(CcTypeEnum.MANUAL.getCode());
+            ccTask.setCcType(ccType.getCode());
             ccTask.setIsRead(0);
             ccTask.setCcTime(LocalDateTime.now());
             ccTask.setRemindCount(0);
@@ -156,7 +190,8 @@ public class WfCcTaskServiceImpl extends ServiceImpl<WfCcTaskMapper, WfCcTask> i
             ccTasks.add(ccTask);
         }
         this.saveBatch(ccTasks);
-        log.info("添加抄送成功, instanceId={}, ccUserCount={}", addDTO.getInstanceId(), newCcUserIds.size());
+        log.info("添加抄送成功, instanceId={}, ccType={}, ccUserCount={}",
+                addDTO.getInstanceId(), ccType.getName(), newCcUserIds.size());
 
         for (WfCcTask ccTask : ccTasks) {
             sendCcNotifyAsync(ccTask, instance);
@@ -319,6 +354,7 @@ public class WfCcTaskServiceImpl extends ServiceImpl<WfCcTaskMapper, WfCcTask> i
         params.put("receiverUserId", ccTask.getCcUserId());
         params.put("instanceId", instance.getId());
         params.put("detailUrl", ccTask.getDetailUrl());
+        params.put("ccType", ccTask.getCcType());
         if (StrUtil.isNotBlank(remark)) {
             params.put("remark", remark);
         }
@@ -327,6 +363,20 @@ public class WfCcTaskServiceImpl extends ServiceImpl<WfCcTaskMapper, WfCcTask> i
             SysUser startUser = sysUserService.getById(instance.getStartUserId());
             if (startUser != null) {
                 params.put("startUserName", startUser.getRealName());
+            }
+        }
+
+        if (ccTask.getCcUserId() != null) {
+            SysUser ccUser = sysUserService.getById(ccTask.getCcUserId());
+            if (ccUser != null) {
+                params.put("receiverUserName", ccUser.getRealName());
+            }
+        }
+
+        if (CcTypeEnum.AUTO_PROCESS_END.getCode().equals(ccTask.getCcType())) {
+            InstanceStatusEnum statusEnum = InstanceStatusEnum.getByCode(instance.getInstanceStatus());
+            if (statusEnum != null) {
+                params.put("processResult", statusEnum.getDesc());
             }
         }
 

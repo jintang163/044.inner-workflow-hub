@@ -602,6 +602,10 @@ public class WfApprovalServiceImpl implements WfApprovalService {
 
         detailVO.setFormData(instance.getFormData());
 
+        List<WfCcTaskVO> ccTaskList = ccTaskService.listAllVOsByInstanceId(instanceId);
+        detailVO.setCcTaskList(ccTaskList);
+        detailVO.setCcUnreadCount(ccTaskService.countUnreadByInstanceId(instanceId));
+
         calcButtonPermissions(detailVO, instance);
 
         return detailVO;
@@ -768,19 +772,12 @@ public class WfApprovalServiceImpl implements WfApprovalService {
         if (userIds == null || userIds.isEmpty()) {
             return;
         }
-        List<WfCcTask> ccTasks = new ArrayList<>();
-        for (Long userId : userIds) {
-            WfCcTask ccTask = new WfCcTask();
-            ccTask.setInstanceId(instanceId);
-            ccTask.setProcessKey(processKey);
-            ccTask.setCcUserId(userId);
-            ccTask.setNodeId(nodeId);
-            ccTask.setNodeName(nodeName);
-            ccTask.setIsRead(0);
-            ccTask.setCcTime(LocalDateTime.now());
-            ccTasks.add(ccTask);
-        }
-        ccTaskService.saveBatch(ccTasks);
+        WfCcAddDTO addDTO = new WfCcAddDTO();
+        addDTO.setInstanceId(instanceId);
+        addDTO.setCcUserIds(userIds);
+        addDTO.setNodeId(nodeId);
+        addDTO.setNodeName(nodeName);
+        ccTaskService.addCcInternal(addDTO);
     }
 
     private String generateInstanceNo() {

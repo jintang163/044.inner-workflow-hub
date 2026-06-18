@@ -20,5 +20,7 @@ public class WfCcAddDTO implements Serializable {
 
     private String nodeName;
 
+    private Integer ccType;
+
     private String remark;
 }

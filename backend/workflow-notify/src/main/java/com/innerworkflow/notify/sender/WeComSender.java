@@ -12,6 +12,8 @@ import java.util.Map;
 @Component
 public class WeComSender implements MessageSender {
 
+    private static final String MOCK_PREFIX = "【模拟发送】";
+
     @Override
     public String getChannelType() {
         return ChannelTypeEnum.WECOM.getCode();
@@ -20,8 +22,8 @@ public class WeComSender implements MessageSender {
     @Override
     public boolean send(WfMessageTemplate template, String receiver, String title, String content, Map<String, Object> params) {
         try {
-            log.info("发送企业微信消息 - 接收人: {}, 标题: {}, 模板ID: {}", receiver, title, template.getWecomTemplateId());
-            log.debug("企微消息内容: {}", content);
+            log.info("{}企业微信消息 - 接收人: {}, 标题: {}, 模板ID: {}", MOCK_PREFIX, receiver, title, template.getWecomTemplateId());
+            log.debug("{}企微消息内容: {}", MOCK_PREFIX, content);
             return true;
         } catch (Exception e) {
             log.error("企业微信消息发送失败 - 接收人: {}, 原因: {}", receiver, e.getMessage(), e);

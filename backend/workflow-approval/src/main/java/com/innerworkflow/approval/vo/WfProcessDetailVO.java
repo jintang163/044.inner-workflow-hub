@@ -28,6 +28,10 @@ public class WfProcessDetailVO implements Serializable {
 
     private List<WfAttachmentVO> attachments;
 
+    private List<WfCcTaskVO> ccTaskList;
+
+    private Long ccUnreadCount;
+
     private Boolean canWithdraw;
 
     private Boolean canApprove;
