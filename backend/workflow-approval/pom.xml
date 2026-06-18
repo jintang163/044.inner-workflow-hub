@@ -34,10 +34,6 @@
             <artifactId>workflow-notify</artifactId>
         </dependency>
         <dependency>
-            <groupId>com.innerworkflow</groupId>
-            <artifactId>workflow-ai</artifactId>
-        </dependency>
-        <dependency>
             <groupId>org.flowable</groupId>
             <artifactId>flowable-spring-boot-starter-process</artifactId>
         </dependency>

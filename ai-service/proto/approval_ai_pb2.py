@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x11\x61pproval_ai.proto\x12\x13innerworkflow.ai.v1\x1a\x1bgoogle/protobuf/empty.proto\"\xeb\x01\n\x10\x41pprovalFeatures\x12\x13\n\x0binstance_id\x18\x01 \x01(\t\x12\x0e\n\x06\x61mount\x18\x02 \x01(\x01\x12\x15\n\rdepartment_id\x18\x03 \x01(\x03\x12\x14\n\x0cinitiator_id\x18\x04 \x01(\x03\x12\x17\n\x0finitiator_level\x18\x05 \x01(\x05\x12\x13\n\x0b\x61pprover_id\x18\x06 \x01(\x03\x12\x13\n\x0bprocess_key\x18\x07 \x01(\t\x12\x18\n\x10\x62usiness_line_id\x18\x08 \x01(\x03\x12\x10\n\x08priority\x18\t \x01(\x05\x12\x16\n\x0e\x66orm_data_json\x18\n \x01(\t\"4\n\x06\x46\x61\x63tor\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t\x12\x0e\n\x06weight\x18\x03 \x01(\x02\"\xbc\x01\n\x16\x41pprovalRecommendation\x12\x1b\n\x13\x61pprove_probability\x18\x01 \x01(\x02\x12\x1a\n\x12recommended_action\x18\x02 \x01(\x05\x12\x0e\n\x06reason\x18\x03 \x01(\t\x12,\n\x07\x66\x61\x63tors\x18\x04 \x03(\x0b\x32\x1b.innerworkflow.ai.v1.Factor\x12\x15\n\rmodel_version\x18\x05 \x01(\t\x12\x14\n\x0cinference_ms\x18\x06 \x01(\x03\"\xfd\x01\n\x10TrainingDataItem\x12\x13\n\x0binstance_id\x18\x01 \x01(\t\x12\x0e\n\x06\x61mount\x18\x02 \x01(\x01\x12\x15\n\rdepartment_id\x18\x03 \x01(\x03\x12\x14\n\x0cinitiator_id\x18\x04 \x01(\x03\x12\x17\n\x0finitiator_level\x18\x05 \x01(\x05\x12\x13\n\x0b\x61pprover_id\x18\x06 \x01(\x03\x12\x13\n\x0bprocess_key\x18\x07 \x01(\t\x12\x18\n\x10\x62usiness_line_id\x18\x08 \x01(\x03\x12\x10\n\x08priority\x18\t \x01(\x05\x12\x16\n\x0e\x66orm_data_json\x18\n \x01(\t\x12\x10\n\x08\x61pproved\x18\x0b \x01(\x08\"\x92\x02\n\x10GetStatsResponse\x12\x1d\n\x15total_trained_samples\x18\x01 \x01(\x03\x12\x1a\n\x12last_training_time\x18\x02 \x01(\t\x12\x1d\n\x15\x63urrent_model_version\x18\x03 \x01(\t\x12\x10\n\x08\x61\x63\x63uracy\x18\x04 \x01(\x02\x12X\n\x12\x66\x65\x61ture_importance\x18\x05 \x03(\x0b\x32<.innerworkflow.ai.v1.GetStatsResponse.FeatureImportanceEntry\x1a\x38\n\x16\x46\x65\x61tureImportanceEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x02:\x02\x38\x01\x32\x87\x02\n\x11\x41pprovalAiService\x12]\n\x07Predict\x12%.innerworkflow.ai.v1.ApprovalFeatures\x1a+.innerworkflow.ai.v1.ApprovalRecommendation\x12H\n\x05Train\x12%.innerworkflow.ai.v1.TrainingDataItem\x1a\x16.google.protobuf.Empty(\x01\x12I\n\x08GetStats\x12\x16.google.protobuf.Empty\x1a%.innerworkflow.ai.v1.GetStatsResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x11\x61pproval_ai.proto\x12\x13innerworkflow.ai.v1\x1a\x1bgoogle/protobuf/empty.proto\"\xe3\x02\n\x10\x41pprovalFeatures\x12\x13\n\x0binstance_id\x18\x01 \x01(\t\x12\x0e\n\x06\x61mount\x18\x02 \x01(\x01\x12\x15\n\rdepartment_id\x18\x03 \x01(\x03\x12\x14\n\x0cinitiator_id\x18\x04 \x01(\x03\x12\x17\n\x0finitiator_level\x18\x05 \x01(\x05\x12\x13\n\x0b\x61pprover_id\x18\x06 \x01(\x03\x12\x13\n\x0bprocess_key\x18\x07 \x01(\t\x12\x18\n\x10\x62usiness_line_id\x18\x08 \x01(\x03\x12\x10\n\x08priority\x18\t \x01(\x05\x12\x16\n\x0e\x66orm_data_json\x18\n \x01(\t\x12\x17\n\x0f\x64\x65partment_rate\x18\x0b \x01(\x02\x12\x1c\n\x14initiator_level_rate\x18\x0c \x01(\x02\x12\x1e\n\x16\x61pprover_approval_rate\x18\r \x01(\x02\x12\x1f\n\x17initiator_approval_rate\x18\x0e \x01(\x02\"4\n\x06\x46\x61\x63tor\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t\x12\x0e\n\x06weight\x18\x03 \x01(\x02\"\xbc\x01\n\x16\x41pprovalRecommendation\x12\x1b\n\x13\x61pprove_probability\x18\x01 \x01(\x02\x12\x1a\n\x12recommended_action\x18\x02 \x01(\x05\x12\x0e\n\x06reason\x18\x03 \x01(\t\x12,\n\x07\x66\x61\x63tors\x18\x04 \x03(\x0b\x32\x1b.innerworkflow.ai.v1.Factor\x12\x15\n\rmodel_version\x18\x05 \x01(\t\x12\x14\n\x0cinference_ms\x18\x06 \x01(\x03\"\xf5\x02\n\x10TrainingDataItem\x12\x13\n\x0binstance_id\x18\x01 \x01(\t\x12\x0e\n\x06\x61mount\x18\x02 \x01(\x01\x12\x15\n\rdepartment_id\x18\x03 \x01(\x03\x12\x14\n\x0cinitiator_id\x18\x04 \x01(\x03\x12\x17\n\x0finitiator_level\x18\x05 \x01(\x05\x12\x13\n\x0b\x61pprover_id\x18\x06 \x01(\x03\x12\x13\n\x0bprocess_key\x18\x07 \x01(\t\x12\x18\n\x10\x62usiness_line_id\x18\x08 \x01(\x03\x12\x10\n\x08priority\x18\t \x01(\x05\x12\x16\n\x0e\x66orm_data_json\x18\n \x01(\t\x12\x10\n\x08\x61pproved\x18\x0b \x01(\x08\x12\x17\n\x0f\x64\x65partment_rate\x18\x0c \x01(\x02\x12\x1c\n\x14initiator_level_rate\x18\r \x01(\x02\x12\x1e\n\x16\x61pprover_approval_rate\x18\x0e \x01(\x02\x12\x1f\n\x17initiator_approval_rate\x18\x0f \x01(\x02\"\x92\x02\n\x10GetStatsResponse\x12\x1d\n\x15total_trained_samples\x18\x01 \x01(\x03\x12\x1a\n\x12last_training_time\x18\x02 \x01(\t\x12\x1d\n\x15\x63urrent_model_version\x18\x03 \x01(\t\x12\x10\n\x08\x61\x63\x63uracy\x18\x04 \x01(\x02\x12X\n\x12\x66\x65\x61ture_importance\x18\x05 \x03(\x0b\x32<.innerworkflow.ai.v1.GetStatsResponse.FeatureImportanceEntry\x1a\x38\n\x16\x46\x65\x61tureImportanceEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x02:\x02\x38\x01\x32\x87\x02\n\x11\x41pprovalAiService\x12]\n\x07Predict\x12%.innerworkflow.ai.v1.ApprovalFeatures\x1a+.innerworkflow.ai.v1.ApprovalRecommendation\x12H\n\x05Train\x12%.innerworkflow.ai.v1.TrainingDataItem\x1a\x16.google.protobuf.Empty(\x01\x12I\n\x08GetStats\x12\x16.google.protobuf.Empty\x1a%.innerworkflow.ai.v1.GetStatsResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -35,17 +35,17 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_GETSTATSRESPONSE_FEATUREIMPORTANCEENTRY']._loaded_options = None
   _globals['_GETSTATSRESPONSE_FEATUREIMPORTANCEENTRY']._serialized_options = b'8\001'
   _globals['_APPROVALFEATURES']._serialized_start=72
-  _globals['_APPROVALFEATURES']._serialized_end=307
-  _globals['_FACTOR']._serialized_start=309
-  _globals['_FACTOR']._serialized_end=361
-  _globals['_APPROVALRECOMMENDATION']._serialized_start=364
-  _globals['_APPROVALRECOMMENDATION']._serialized_end=552
-  _globals['_TRAININGDATAITEM']._serialized_start=555
-  _globals['_TRAININGDATAITEM']._serialized_end=808
-  _globals['_GETSTATSRESPONSE']._serialized_start=811
-  _globals['_GETSTATSRESPONSE']._serialized_end=1085
-  _globals['_GETSTATSRESPONSE_FEATUREIMPORTANCEENTRY']._serialized_start=1029
-  _globals['_GETSTATSRESPONSE_FEATUREIMPORTANCEENTRY']._serialized_end=1085
-  _globals['_APPROVALAISERVICE']._serialized_start=1088
-  _globals['_APPROVALAISERVICE']._serialized_end=1351
+  _globals['_APPROVALFEATURES']._serialized_end=427
+  _globals['_FACTOR']._serialized_start=429
+  _globals['_FACTOR']._serialized_end=481
+  _globals['_APPROVALRECOMMENDATION']._serialized_start=484
+  _globals['_APPROVALRECOMMENDATION']._serialized_end=672
+  _globals['_TRAININGDATAITEM']._serialized_start=675
+  _globals['_TRAININGDATAITEM']._serialized_end=1048
+  _globals['_GETSTATSRESPONSE']._serialized_start=1051
+  _globals['_GETSTATSRESPONSE']._serialized_end=1325
+  _globals['_GETSTATSRESPONSE_FEATUREIMPORTANCEENTRY']._serialized_start=1269
+  _globals['_GETSTATSRESPONSE_FEATUREIMPORTANCEENTRY']._serialized_end=1325
+  _globals['_APPROVALAISERVICE']._serialized_start=1328
+  _globals['_APPROVALAISERVICE']._serialized_end=1591
 # @@protoc_insertion_point(module_scope)

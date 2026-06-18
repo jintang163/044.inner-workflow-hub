@@ -1,4 +1,4 @@
-package com.innerworkflow.ai.vo;
+package com.innerworkflow.common.vo;
 
 import lombok.Data;
 

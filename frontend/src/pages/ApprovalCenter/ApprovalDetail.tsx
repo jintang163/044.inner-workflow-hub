@@ -44,217 +44,6 @@ const { TextArea } = Input
 const { TabPane } = Tabs
 const { confirm } = Modal
 
-const mockInstance = (instanceNo: string): ProcessInstanceVO => ({
-  id: 50001,
-  instanceNo,
-  processKey: 'leave_annual',
-  processName: '年假申请',
-  title: '2024年6月年假申请（5天）',
-  formId: 1,
-  formVersion: 1,
-  formData: {
-    title: '2024年6月年假申请（5天）',
-    leaveType: '年假',
-    startDate: '2024-06-20',
-    endDate: '2024-06-24',
-    leaveDays: 5,
-    reason: '家庭出游计划，陪同家人出行',
-    handover: '已与李四确认工作交接事宜',
-    contact: '138xxxx8888'
-  },
-  formSchema: null,
-  instanceStatus: 1,
-  instanceStatusDesc: '审批中',
-  startUserId: 101,
-  startUserName: '张三',
-  startUserAvatar: '',
-  startDeptName: '技术研发部',
-  startTime: dayjs().subtract(2, 'day').format('YYYY-MM-DD HH:mm:ss'),
-  currentNodeIds: ['node_approve_2'],
-  currentNodeNames: ['财务总监审批'],
-  canWithdraw: false,
-  bpmnXml: `<?xml version="1.0" encoding="UTF-8"?>
-<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
-             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
-             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
-             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
-             id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
-  <process id="Process_1" isExecutable="false">
-    <startEvent id="start" name="发起申请">
-      <outgoing>Flow_1</outgoing>
-    </startEvent>
-    <userTask id="node_approve_1" name="部门主管审批">
-      <incoming>Flow_1</incoming>
-      <outgoing>Flow_2</outgoing>
-    </userTask>
-    <userTask id="node_approve_2" name="财务总监审批">
-      <incoming>Flow_2</incoming>
-      <outgoing>Flow_3</outgoing>
-    </userTask>
-    <userTask id="node_approve_3" name="总经理审批">
-      <incoming>Flow_3</incoming>
-      <outgoing>Flow_4</outgoing>
-    </userTask>
-    <endEvent id="end" name="审批完成">
-      <incoming>Flow_4</incoming>
-    </endEvent>
-    <sequenceFlow id="Flow_1" sourceRef="start" targetRef="node_approve_1" />
-    <sequenceFlow id="Flow_2" sourceRef="node_approve_1" targetRef="node_approve_2" />
-    <sequenceFlow id="Flow_3" sourceRef="node_approve_2" targetRef="node_approve_3" />
-    <sequenceFlow id="Flow_4" sourceRef="node_approve_3" targetRef="end" />
-  </process>
-  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
-    <bpmndi:BPMNPlane bpmnElement="Process_1" id="BPMNPlane_1">
-      <bpmndi:BPMNShape bpmnElement="start" id="BPMNShape_start">
-        <omgdc:Bounds x="150" y="100" width="36" height="36" />
-        <bpmndi:BPMNLabel>
-          <omgdc:Bounds x="138" y="142" width="60" height="14" />
-        </bpmndi:BPMNLabel>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape bpmnElement="node_approve_1" id="BPMNShape_node_approve_1">
-        <omgdc:Bounds x="270" y="78" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape bpmnElement="node_approve_2" id="BPMNShape_node_approve_2">
-        <omgdc:Bounds x="470" y="78" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape bpmnElement="node_approve_3" id="BPMNShape_node_approve_3">
-        <omgdc:Bounds x="670" y="78" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape bpmnElement="end" id="BPMNShape_end">
-        <omgdc:Bounds x="870" y="100" width="36" height="36" />
-        <bpmndi:BPMNLabel>
-          <omgdc:Bounds x="860" y="142" width="56" height="14" />
-        </bpmndi:BPMNLabel>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge bpmnElement="Flow_1" id="BPMNEdge_Flow_1">
-        <omgdi:waypoint x="186" y="118" />
-        <omgdi:waypoint x="270" y="118" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge bpmnElement="Flow_2" id="BPMNEdge_Flow_2">
-        <omgdi:waypoint x="370" y="118" />
-        <omgdi:waypoint x="470" y="118" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge bpmnElement="Flow_3" id="BPMNEdge_Flow_3">
-        <omgdi:waypoint x="570" y="118" />
-        <omgdi:waypoint x="670" y="118" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge bpmnElement="Flow_4" id="BPMNEdge_Flow_4">
-        <omgdi:waypoint x="770" y="118" />
-        <omgdi:waypoint x="870" y="118" />
-      </bpmndi:BPMNEdge>
-    </bpmndi:BPMNPlane>
-  </bpmndi:BPMNDiagram>
-</definitions>`
-})
-
-const mockHistory = (): ApprovalHistoryVO[] => [
-  {
-    id: 1,
-    nodeId: 'start',
-    nodeName: '发起申请',
-    activityType: 1,
-    activityTypeDesc: '发起',
-    operatorId: 101,
-    operatorName: '张三',
-    operatorDeptName: '技术研发部',
-    operateTime: dayjs().subtract(2, 'day').format('YYYY-MM-DD HH:mm:ss'),
-    actionRemark: '提交年假申请，计划5天，陪同家人出游',
-    duration: undefined,
-    status: 'approved'
-  },
-  {
-    id: 2,
-    nodeId: 'node_approve_1',
-    nodeName: '部门主管审批',
-    activityType: 2,
-    activityTypeDesc: '同意',
-    operatorId: 102,
-    operatorName: '李主管',
-    operatorDeptName: '技术研发部',
-    operateTime: dayjs().subtract(2, 'day').add(2, 'hour').format('YYYY-MM-DD HH:mm:ss'),
-    actionRemark: '工作已安排妥当，同意休假',
-    duration: 2 * 60 * 60 * 1000,
-    status: 'approved',
-    signatureUrl: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNTAiIGhlaWdodD0iNjAiPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjMzMzIiBmb250LWZhbWlseT0iY2FybGlncmFwaHkiIGZvbnQtc2l6ZT0iMjAiPuW8oOS4nOWFiDwvdGV4dD48L3N2Zz4='
-  },
-  {
-    id: 3,
-    nodeId: 'node_approve_2',
-    nodeName: '财务总监审批',
-    activityType: 1,
-    activityTypeDesc: '审批中',
-    operatorId: 103,
-    operatorName: '王总监',
-    operatorDeptName: '财务部',
-    operateTime: dayjs().subtract(1, 'day').add(8, 'hour').format('YYYY-MM-DD HH:mm:ss'),
-    duration: undefined,
-    status: 'current'
-  },
-  {
-    id: 4,
-    nodeId: 'node_approve_3',
-    nodeName: '总经理审批',
-    activityType: 1,
-    operatorId: 0,
-    operatorName: '待审批',
-    operatorDeptName: '-',
-    operateTime: '-',
-    status: 'pending'
-  }
-]
-
-const mockCurrentTask: ApprovalTaskVO = {
-  id: 10001,
-  taskNo: 'TK202406001',
-  flowableTaskId: 'task_2',
-  instanceId: 50001,
-  instanceNo: 'AP20240600001',
-  processKey: 'leave_annual',
-  processName: '年假申请',
-  title: '2024年6月年假申请（5天）',
-  nodeId: 'node_approve_2',
-  nodeName: '财务总监审批',
-  assigneeId: 1,
-  assigneeName: '当前用户',
-  assignTime: dayjs().subtract(1, 'day').add(8, 'hour').format('YYYY-MM-DD HH:mm:ss'),
-  dueTime: dayjs().add(24, 'hour').format('YYYY-MM-DD HH:mm:ss'),
-  taskStatus: 'PENDING',
-  priority: 2,
-  startUserId: 101,
-  startUserName: '张三',
-  startDeptName: '技术研发部',
-  startTime: dayjs().subtract(2, 'day').format('YYYY-MM-DD HH:mm:ss'),
-  formData: { amount: 2500 },
-  aiRecommendation: {
-    id: 100001,
-    taskId: 10001,
-    instanceId: 50001,
-    approverId: 1,
-    approveProbability: 0.91,
-    recommendedAction: 1,
-    reason: '金额低，该部门历史审批通过率高，建议同意',
-    factors: [
-      { key: 'amount_level', value: '低', weight: 0.35 },
-      { key: 'department_rate', value: '92%', weight: 0.28 },
-      { key: 'approver_approval_rate', value: '88%', weight: 0.2 },
-      { key: 'process_type', value: '年假申请', weight: 0.1 },
-      { key: 'initiator_level_rate', value: '良好', weight: 0.07 }
-    ],
-    factorsJson: '',
-    modelVersion: 'v1.0.0',
-    inferenceMs: 52,
-    adopted: 0,
-    createTime: dayjs().subtract(1, 'day').add(8, 'hour').add(2, 'minute').format('YYYY-MM-DD HH:mm:ss')
-  },
-  aiRecommendationId: 100001,
-  canAddSign: true,
-  canTransfer: true,
-  canDelegate: true,
-  canReject: true,
-  needSignature: false,
-  needComment: true
-}
-
 const mockCcList = [
   { id: 1, userId: 201, userName: 'HR小刘', deptName: '人力资源部' },
   { id: 2, userId: 202, userName: '行政小王', deptName: '行政管理部' }
@@ -284,25 +73,39 @@ const ApprovalDetail: React.FC = () => {
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      // const [instRes, histRes] = await Promise.all([
-      //   approvalApi.instanceDetail(instanceNo),
-      //   approvalApi.approvalHistory(instanceNo)
-      // ])
-      // setInstance(instRes)
-      // setHistory(histRes)
-      await new Promise(resolve => setTimeout(resolve, 500))
-      const inst = mockInstance(instanceNo)
-      setInstance(inst)
-      setHistory(mockHistory())
+      const [instRes, histRes] = await Promise.all([
+        approvalApi.instanceDetail(instanceNo),
+        approvalApi.approvalHistory(instanceNo)
+      ])
+      setInstance(instRes)
+      setHistory(histRes)
+
       if (passedTask) {
         setCurrentTask(passedTask)
         setAiRecommendation(passedTask.aiRecommendation || null)
-      } else if (hasPendingTask) {
-        setCurrentTask(mockCurrentTask)
-        setAiRecommendation(mockCurrentTask.aiRecommendation || null)
+        if (!passedTask.aiRecommendation && passedTask.id) {
+          try {
+            const rec = await aiApi.getRecommendation(passedTask.id)
+            setAiRecommendation(rec)
+          } catch {
+            // ignore
+          }
+        }
       } else {
-        setCurrentTask(mockCurrentTask)
-        setAiRecommendation(mockCurrentTask.aiRecommendation || null)
+        const todoListRes = await approvalApi.todoList({ pageNum: 1, pageSize: 100 })
+        const matchedTask = todoListRes?.list?.find((t: ApprovalTaskVO) => t.instanceNo === instanceNo)
+        if (matchedTask) {
+          setCurrentTask(matchedTask)
+          setAiRecommendation(matchedTask.aiRecommendation || null)
+          if (!matchedTask.aiRecommendation && matchedTask.id) {
+            try {
+              const rec = await aiApi.getRecommendation(matchedTask.id)
+              setAiRecommendation(rec)
+            } catch {
+              // ignore
+            }
+          }
+        }
       }
     } catch (err: any) {
       message.error(err?.message || '加载详情失败')

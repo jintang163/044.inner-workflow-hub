@@ -13,7 +13,8 @@ import org.springframework.scheduling.annotation.EnableScheduling;
         "com.innerworkflow.form.mapper",
         "com.innerworkflow.approval.mapper",
         "com.innerworkflow.notify.mapper",
-        "com.innerworkflow.ai.mapper"
+        "com.innerworkflow.ai.mapper",
+        "com.innerworkflow.common.mapper"
 })
 @EnableAsync
 @EnableScheduling

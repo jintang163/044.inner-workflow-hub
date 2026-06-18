@@ -1,7 +1,7 @@
-package com.innerworkflow.ai.mapper;
+package com.innerworkflow.common.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.innerworkflow.ai.entity.WfAiRecommendation;
+import com.innerworkflow.common.entity.WfAiRecommendation;
 import org.apache.ibatis.annotations.Mapper;
 
 @Mapper

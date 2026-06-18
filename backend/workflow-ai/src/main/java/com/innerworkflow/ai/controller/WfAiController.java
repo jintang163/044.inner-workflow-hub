@@ -1,8 +1,8 @@
 package com.innerworkflow.ai.controller;
 
-import com.innerworkflow.ai.service.AiRecommendationService;
-import com.innerworkflow.ai.vo.AiRecommendationVO;
-import com.innerworkflow.ai.vo.AiStatsVO;
+import com.innerworkflow.common.service.AiRecommendationService;
+import com.innerworkflow.common.vo.AiRecommendationVO;
+import com.innerworkflow.common.vo.AiStatsVO;
 import com.innerworkflow.common.result.R;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;

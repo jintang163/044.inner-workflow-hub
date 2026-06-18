@@ -82,7 +82,11 @@ def _prepare_training_data(training_data: List[Dict]) -> pd.DataFrame:
             business_line_id=item.get('business_line_id', 0),
             priority=item.get('priority', 0),
             form_data_json=item.get('form_data_json', ''),
-            historical_data=training_data
+            historical_data=training_data,
+            department_rate=item.get('department_rate', 0.75),
+            initiator_level_rate=item.get('initiator_level_rate', 0.75),
+            approver_approval_rate=item.get('approver_approval_rate', 0.75),
+            initiator_approval_rate=item.get('initiator_approval_rate', 0.75)
         )
         features['approved'] = int(item.get('approved', False))
         processed_items.append(features)

@@ -1,4 +1,4 @@
-package com.innerworkflow.ai.dto;
+package com.innerworkflow.common.dto;
 
 import lombok.Data;
 
@@ -31,4 +31,12 @@ public class ApprovalAiFeaturesDTO implements Serializable {
     private Integer priority;
 
     private Object formData;
+
+    private Double departmentRate;
+
+    private Double initiatorLevelRate;
+
+    private Double approverApprovalRate;
+
+    private Double initiatorApprovalRate;
 }

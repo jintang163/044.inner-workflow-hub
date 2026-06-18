@@ -35,32 +35,36 @@ def extract_features(
     business_line_id: int,
     priority: int,
     form_data_json: str,
-    historical_data: Optional[List[Dict]] = None
+    historical_data: Optional[List[Dict]] = None,
+    department_rate: float = 0.75,
+    initiator_level_rate: float = 0.75,
+    approver_approval_rate: float = 0.75,
+    initiator_approval_rate: float = 0.75
 ) -> Dict:
     historical_data = historical_data or []
 
     amount_level = _get_amount_level(amount)
-    department_rate = compute_department_rate(department_id, historical_data)
-    initiator_level_rate = _get_initiator_level_rate(initiator_level)
-    approver_rate = compute_approver_rate(approver_id, historical_data)
+    dept_rate = department_rate if department_rate and department_rate > 0 else compute_department_rate(department_id, historical_data)
+    init_level_rate = initiator_level_rate if initiator_level_rate and initiator_level_rate > 0 else _get_initiator_level_rate(initiator_level)
+    approver_rate = approver_approval_rate if approver_approval_rate and approver_approval_rate > 0 else compute_approver_rate(approver_id, historical_data)
     process_type = _get_process_type(process_key)
-    initiator_rate = compute_initiator_rate(initiator_id, historical_data)
+    init_rate = initiator_approval_rate if initiator_approval_rate and initiator_approval_rate > 0 else compute_initiator_rate(initiator_id, historical_data)
 
     features = {
         'instance_id': instance_id,
         'amount': amount,
         'amount_level': amount_level,
         'department_id': department_id,
-        'department_rate': department_rate,
+        'department_rate': dept_rate,
         'initiator_id': initiator_id,
         'initiator_level': initiator_level,
-        'initiator_level_rate': initiator_level_rate,
+        'initiator_level_rate': init_level_rate,
         'approver_id': approver_id,
         'approver_approval_rate': approver_rate,
         'process_type': process_type,
         'business_line_id': business_line_id,
         'priority': priority,
-        'initiator_approval_rate': initiator_rate
+        'initiator_approval_rate': init_rate
     }
 
     if form_data_json:

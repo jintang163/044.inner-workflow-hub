@@ -15,6 +15,10 @@ message ApprovalFeatures {
     int64 business_line_id = 8;
     int32 priority = 9;
     string form_data_json = 10;
+    float department_rate = 11;
+    float initiator_level_rate = 12;
+    float approver_approval_rate = 13;
+    float initiator_approval_rate = 14;
 }
 
 message Factor {
@@ -44,6 +48,10 @@ message TrainingDataItem {
     int32 priority = 9;
     string form_data_json = 10;
     bool approved = 11;
+    float department_rate = 12;
+    float initiator_level_rate = 13;
+    float approver_approval_rate = 14;
+    float initiator_approval_rate = 15;
 }
 
 message GetStatsResponse {

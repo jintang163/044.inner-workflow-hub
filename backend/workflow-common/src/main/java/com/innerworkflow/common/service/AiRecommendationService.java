@@ -1,8 +1,8 @@
-package com.innerworkflow.ai.service;
+package com.innerworkflow.common.service;
 
-import com.innerworkflow.ai.dto.ApprovalAiFeaturesDTO;
-import com.innerworkflow.ai.vo.AiRecommendationVO;
-import com.innerworkflow.ai.vo.AiStatsVO;
+import com.innerworkflow.common.dto.ApprovalAiFeaturesDTO;
+import com.innerworkflow.common.vo.AiRecommendationVO;
+import com.innerworkflow.common.vo.AiStatsVO;
 
 public interface AiRecommendationService {
 

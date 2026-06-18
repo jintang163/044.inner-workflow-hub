@@ -2,6 +2,7 @@ import logging
 import os
 import sys
 import time
+import random
 from datetime import datetime
 from typing import Dict, List, Optional
 from concurrent import futures
@@ -15,7 +16,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'pro
 from config import GRPC_PORT, MODEL_PATH, MODEL_VERSION, APPROVE_THRESHOLD, LOG_LEVEL
 from feature_engineering import extract_features, generate_factor_explanations, features_to_array
 from model_trainer import train_model, save_model, load_model, incremental_train, feature_importance, predict
-from db_client import get_db_client
 
 try:
     from proto import approval_ai_pb2 as pb2
@@ -45,6 +45,56 @@ class ApprovalAiService(pb2_grpc.ApprovalAiServiceServicer):
 
         self._initialize_model()
 
+    def _generate_synthetic_data(self, sample_count=2000) -> List[Dict]:
+        logger.info(f"Generating {sample_count} synthetic training samples...")
+        random.seed(42)
+        samples = []
+        process_keys = ['leave', 'expense', 'purchase', 'contract', 'recruitment', 'default']
+        for i in range(sample_count):
+            amount = random.choice([500, 1500, 4000, 8000, 20000, 60000, 150000])
+            amount_level = 1 if amount < 1000 else 2 if amount < 5000 else 3 if amount < 10000 else 4 if amount < 50000 else 5 if amount < 100000 else 6
+            initiator_level = random.randint(1, 8)
+            initiator_level_rate = max(0.6, min(0.95, 0.98 - initiator_level * 0.04))
+            department_rate = random.uniform(0.65, 0.95)
+            approver_approval_rate = random.uniform(0.65, 0.95)
+            initiator_approval_rate = random.uniform(0.65, 0.95)
+            priority = random.choice([1, 2, 3])
+            process_key = random.choice(process_keys)
+            process_type_mapping = {k: v for v, k in enumerate(['leave', 'expense', 'purchase', 'contract', 'recruitment', 'promotion', 'resignation', 'default'])}
+            process_type = process_type_mapping.get(process_key, 0)
+
+            approve_score = (
+                (1.0 - amount_level * 0.06) +
+                department_rate * 0.3 +
+                initiator_level_rate * 0.25 +
+                approver_approval_rate * 0.25 +
+                initiator_approval_rate * 0.15 +
+                (1.0 if process_type in [0, 1] else 0.0) * 0.1
+            )
+            approved = (approve_score + random.uniform(-0.3, 0.3)) > 1.15
+
+            samples.append({
+                'instance_id': f'syn_{i}',
+                'amount': float(amount),
+                'department_id': random.randint(1, 20),
+                'initiator_id': random.randint(100, 500),
+                'initiator_level': initiator_level,
+                'approver_id': random.randint(10, 99),
+                'process_key': process_key,
+                'business_line_id': random.randint(1, 5),
+                'priority': priority,
+                'form_data_json': '',
+                'approved': bool(approved),
+                'amount_level': amount_level,
+                'department_rate': department_rate,
+                'initiator_level_rate': initiator_level_rate,
+                'approver_approval_rate': approver_approval_rate,
+                'initiator_approval_rate': initiator_approval_rate,
+                'process_type': process_type
+            })
+        logger.info(f"Generated {len(samples)} synthetic samples")
+        return samples
+
     def _initialize_model(self):
         logger.info("Initializing AI model...")
 
@@ -59,23 +109,17 @@ class ApprovalAiService(pb2_grpc.ApprovalAiServiceServicer):
                 logger.info("Model loaded successfully")
                 return
 
-        logger.info("No existing model found, training initial model")
+        logger.info("No existing model found, training initial model with synthetic data")
 
-        db_client = get_db_client()
-        historical_data = db_client.fetch_historical_approvals()
-        db_client.close()
-
-        if not historical_data:
-            logger.info("No historical data found, using synthetic data for initial training")
-
-        self.historical_data = historical_data
+        initial_training_data = self._generate_synthetic_data(2000)
 
         try:
-            self.model, metrics = train_model(historical_data, model_type='lightgbm')
+            self.model, metrics = train_model(initial_training_data, model_type='lightgbm')
             self.accuracy = metrics.get('accuracy', 0.0)
             self.total_trained_samples = metrics.get('train_samples', 0) + metrics.get('test_samples', 0)
             self.last_training_time = datetime.now().isoformat()
             self.feature_importance_map = feature_importance(self.model)
+            self.historical_data = initial_training_data
 
             save_model(self.model, MODEL_PATH, self.model_version)
             self._save_stats()
@@ -83,14 +127,15 @@ class ApprovalAiService(pb2_grpc.ApprovalAiServiceServicer):
             logger.info(f"Initial model trained. Accuracy: {self.accuracy:.4f}, Samples: {self.total_trained_samples}")
 
         except Exception as e:
-            logger.error(f"Failed to train initial model: {e}")
+            logger.error(f"Failed to train initial LightGBM model: {e}")
             logger.info("Falling back to XGBoost...")
             try:
-                self.model, metrics = train_model(historical_data, model_type='xgboost')
+                self.model, metrics = train_model(initial_training_data, model_type='xgboost')
                 self.accuracy = metrics.get('accuracy', 0.0)
                 self.total_trained_samples = metrics.get('train_samples', 0) + metrics.get('test_samples', 0)
                 self.last_training_time = datetime.now().isoformat()
                 self.feature_importance_map = feature_importance(self.model)
+                self.historical_data = initial_training_data
 
                 save_model(self.model, MODEL_PATH, self.model_version)
                 self._save_stats()
@@ -147,7 +192,11 @@ class ApprovalAiService(pb2_grpc.ApprovalAiServiceServicer):
                 business_line_id=request.business_line_id,
                 priority=request.priority,
                 form_data_json=request.form_data_json,
-                historical_data=self.historical_data
+                historical_data=self.historical_data,
+                department_rate=request.department_rate,
+                initiator_level_rate=request.initiator_level_rate,
+                approver_approval_rate=request.approver_approval_rate,
+                initiator_approval_rate=request.initiator_approval_rate
             )
 
             X = features_to_array(feature_dict)
@@ -226,7 +275,11 @@ class ApprovalAiService(pb2_grpc.ApprovalAiServiceServicer):
                     'business_line_id': item.business_line_id,
                     'priority': item.priority,
                     'form_data_json': item.form_data_json,
-                    'approved': item.approved
+                    'approved': item.approved,
+                    'department_rate': item.department_rate,
+                    'initiator_level_rate': item.initiator_level_rate,
+                    'approver_approval_rate': item.approver_approval_rate,
+                    'initiator_approval_rate': item.initiator_approval_rate
                 })
 
             logger.info(f"Received {len(training_data)} training items")

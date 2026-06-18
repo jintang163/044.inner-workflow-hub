@@ -3,19 +3,19 @@ package com.innerworkflow.ai.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.google.protobuf.Empty;
-import com.innerworkflow.ai.dto.ApprovalAiFeaturesDTO;
-import com.innerworkflow.ai.entity.WfAiRecommendation;
+import com.innerworkflow.common.dto.ApprovalAiFeaturesDTO;
+import com.innerworkflow.common.entity.WfAiRecommendation;
 import com.innerworkflow.ai.grpc.ApprovalAiServiceGrpc;
 import com.innerworkflow.ai.grpc.ApprovalFeatures;
 import com.innerworkflow.ai.grpc.ApprovalRecommendation;
 import com.innerworkflow.ai.grpc.Factor;
 import com.innerworkflow.ai.grpc.GetStatsResponse;
 import com.innerworkflow.ai.grpc.TrainingDataItem;
-import com.innerworkflow.ai.mapper.WfAiRecommendationMapper;
-import com.innerworkflow.ai.service.AiRecommendationService;
-import com.innerworkflow.ai.vo.AiFactorVO;
-import com.innerworkflow.ai.vo.AiRecommendationVO;
-import com.innerworkflow.ai.vo.AiStatsVO;
+import com.innerworkflow.common.mapper.WfAiRecommendationMapper;
+import com.innerworkflow.common.service.AiRecommendationService;
+import com.innerworkflow.common.vo.AiFactorVO;
+import com.innerworkflow.common.vo.AiRecommendationVO;
+import com.innerworkflow.common.vo.AiStatsVO;
 import com.innerworkflow.approval.entity.WfApprovalHistory;
 import com.innerworkflow.approval.entity.WfApprovalTask;
 import com.innerworkflow.approval.entity.WfProcessInstance;
@@ -26,6 +26,7 @@ import com.innerworkflow.auth.entity.SysUser;
 import com.innerworkflow.auth.mapper.SysUserMapper;
 import com.innerworkflow.bpmn.entity.WfProcessDefinition;
 import com.innerworkflow.bpmn.mapper.WfProcessDefinitionMapper;
+import com.innerworkflow.common.enums.HistoryActivityTypeEnum;
 import com.innerworkflow.common.enums.TaskActionEnum;
 import com.innerworkflow.common.exception.BusinessException;
 import com.innerworkflow.common.util.IdGenerator;
@@ -166,7 +167,9 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
 
         LambdaQueryWrapper<WfApprovalHistory> wrapper = new LambdaQueryWrapper<>();
         wrapper.ge(WfApprovalHistory::getOperateTime, sixMonthsAgo);
-        wrapper.in(WfApprovalHistory::getActivityType, TaskActionEnum.AGREE.getCode(), TaskActionEnum.REJECT.getCode());
+        wrapper.in(WfApprovalHistory::getActivityType,
+                HistoryActivityTypeEnum.APPROVE.getCode(),
+                HistoryActivityTypeEnum.REJECT.getCode());
         List<WfApprovalHistory> histories = historyMapper.selectList(wrapper);
 
         if (histories.isEmpty()) {
@@ -236,7 +239,97 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
             }
         }
 
+        LocalDateTime windowStart = LocalDateTime.now().minusMonths(6);
+        features.setDepartmentRate(computeDepartmentRate(instance.getStartDeptId(), windowStart));
+        features.setInitiatorLevelRate(computeInitiatorLevelRate(features.getInitiatorLevel()));
+        features.setApproverApprovalRate(computeApproverApprovalRate(task.getAssigneeId(), windowStart));
+        features.setInitiatorApprovalRate(computeInitiatorApprovalRate(instance.getStartUserId(), windowStart));
+
         return features;
+    }
+
+    private double computeDepartmentRate(Long departmentId, LocalDateTime windowStart) {
+        if (departmentId == null) {
+            return 0.75;
+        }
+        LambdaQueryWrapper<WfApprovalHistory> wrapper = new LambdaQueryWrapper<>();
+        wrapper.ge(WfApprovalHistory::getOperateTime, windowStart);
+        wrapper.in(WfApprovalHistory::getActivityType,
+                HistoryActivityTypeEnum.APPROVE.getCode(),
+                HistoryActivityTypeEnum.REJECT.getCode());
+        List<WfApprovalHistory> allHistories = historyMapper.selectList(wrapper);
+
+        List<WfApprovalHistory> targetHistories = new ArrayList<>();
+        for (WfApprovalHistory h : allHistories) {
+            WfProcessInstance inst = instanceMapper.selectById(h.getInstanceId());
+            if (inst != null && departmentId.equals(inst.getStartDeptId())) {
+                targetHistories.add(h);
+            }
+        }
+        if (targetHistories.isEmpty()) {
+            return 0.75;
+        }
+        long approveCount = targetHistories.stream()
+                .filter(h -> HistoryActivityTypeEnum.APPROVE.getCode().equals(h.getActivityType()))
+                .count();
+        return (double) approveCount / targetHistories.size();
+    }
+
+    private double computeInitiatorLevelRate(Integer initiatorLevel) {
+        if (initiatorLevel == null) {
+            return 0.75;
+        }
+        double[] levelRates = {0.95, 0.92, 0.88, 0.84, 0.80, 0.76, 0.72, 0.68, 0.64, 0.60};
+        int idx = Math.min(initiatorLevel - 1, levelRates.length - 1);
+        if (idx < 0) idx = 0;
+        return levelRates[idx];
+    }
+
+    private double computeApproverApprovalRate(Long approverId, LocalDateTime windowStart) {
+        if (approverId == null) {
+            return 0.75;
+        }
+        LambdaQueryWrapper<WfApprovalHistory> wrapper = new LambdaQueryWrapper<>();
+        wrapper.ge(WfApprovalHistory::getOperateTime, windowStart);
+        wrapper.in(WfApprovalHistory::getActivityType,
+                HistoryActivityTypeEnum.APPROVE.getCode(),
+                HistoryActivityTypeEnum.REJECT.getCode());
+        wrapper.eq(WfApprovalHistory::getOperatorId, approverId);
+        List<WfApprovalHistory> histories = historyMapper.selectList(wrapper);
+        if (histories.isEmpty()) {
+            return 0.75;
+        }
+        long approveCount = histories.stream()
+                .filter(h -> HistoryActivityTypeEnum.APPROVE.getCode().equals(h.getActivityType()))
+                .count();
+        return (double) approveCount / histories.size();
+    }
+
+    private double computeInitiatorApprovalRate(Long initiatorId, LocalDateTime windowStart) {
+        if (initiatorId == null) {
+            return 0.75;
+        }
+        LambdaQueryWrapper<WfApprovalHistory> wrapper = new LambdaQueryWrapper<>();
+        wrapper.ge(WfApprovalHistory::getOperateTime, windowStart);
+        wrapper.in(WfApprovalHistory::getActivityType,
+                HistoryActivityTypeEnum.APPROVE.getCode(),
+                HistoryActivityTypeEnum.REJECT.getCode());
+        List<WfApprovalHistory> allHistories = historyMapper.selectList(wrapper);
+
+        List<WfApprovalHistory> targetHistories = new ArrayList<>();
+        for (WfApprovalHistory h : allHistories) {
+            WfProcessInstance inst = instanceMapper.selectById(h.getInstanceId());
+            if (inst != null && initiatorId.equals(inst.getStartUserId())) {
+                targetHistories.add(h);
+            }
+        }
+        if (targetHistories.isEmpty()) {
+            return 0.75;
+        }
+        long approveCount = targetHistories.stream()
+                .filter(h -> HistoryActivityTypeEnum.APPROVE.getCode().equals(h.getActivityType()))
+                .count();
+        return (double) approveCount / targetHistories.size();
     }
 
     private ApprovalFeatures convertToGrpcFeatures(ApprovalAiFeaturesDTO dto) {
@@ -250,7 +343,11 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
                 .setProcessKey(dto.getProcessKey() != null ? dto.getProcessKey() : "")
                 .setBusinessLineId(dto.getBusinessLineId() != null ? dto.getBusinessLineId() : 0L)
                 .setPriority(dto.getPriority() != null ? dto.getPriority() : 0)
-                .setFormDataJson(dto.getFormData() != null ? JsonUtils.toJsonString(dto.getFormData()) : "");
+                .setFormDataJson(dto.getFormData() != null ? JsonUtils.toJsonString(dto.getFormData()) : "")
+                .setDepartmentRate((float)(dto.getDepartmentRate() != null ? dto.getDepartmentRate() : 0.75))
+                .setInitiatorLevelRate((float)(dto.getInitiatorLevelRate() != null ? dto.getInitiatorLevelRate() : 0.75))
+                .setApproverApprovalRate((float)(dto.getApproverApprovalRate() != null ? dto.getApproverApprovalRate() : 0.75))
+                .setInitiatorApprovalRate((float)(dto.getInitiatorApprovalRate() != null ? dto.getInitiatorApprovalRate() : 0.75));
         return builder.build();
     }
 
@@ -311,32 +408,44 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
         }
 
         WfApprovalTask task = findTaskByHistory(history);
-        if (task == null) {
-            return null;
+        Long approverId = task != null ? task.getAssigneeId() : history.getOperatorId();
+        Integer initiatorLevel = null;
+        if (instance.getStartUserId() != null) {
+            SysUser initiator = userMapper.selectById(instance.getStartUserId());
+            if (initiator != null) {
+                initiatorLevel = initiator.getUserType();
+            }
         }
 
-        boolean approved = TaskActionEnum.AGREE.getCode().equals(history.getActivityType());
+        boolean approved = HistoryActivityTypeEnum.APPROVE.getCode().equals(history.getActivityType());
+
+        LocalDateTime windowStart = history.getOperateTime() != null
+                ? history.getOperateTime().minusMonths(6)
+                : LocalDateTime.now().minusMonths(6);
+
+        double departmentRate = computeDepartmentRate(instance.getStartDeptId(), windowStart);
+        double initiatorLevelRate = computeInitiatorLevelRate(initiatorLevel);
+        double approverRate = computeApproverApprovalRate(approverId, windowStart);
+        double initiatorRate = computeInitiatorApprovalRate(instance.getStartUserId(), windowStart);
 
         TrainingDataItem.Builder builder = TrainingDataItem.newBuilder()
                 .setInstanceId(instance.getId().toString())
                 .setDepartmentId(instance.getStartDeptId() != null ? instance.getStartDeptId() : 0L)
                 .setInitiatorId(instance.getStartUserId() != null ? instance.getStartUserId() : 0L)
-                .setApproverId(task.getAssigneeId() != null ? task.getAssigneeId() : 0L)
+                .setInitiatorLevel(initiatorLevel != null ? initiatorLevel : 0)
+                .setApproverId(approverId != null ? approverId : 0L)
                 .setProcessKey(instance.getProcessKey() != null ? instance.getProcessKey() : "")
                 .setBusinessLineId(instance.getBusinessLineId() != null ? instance.getBusinessLineId() : 0L)
                 .setPriority(instance.getPriority() != null ? instance.getPriority() : 0)
                 .setFormDataJson(instance.getFormData() != null ? JsonUtils.toJsonString(instance.getFormData()) : "")
-                .setApproved(approved);
+                .setApproved(approved)
+                .setDepartmentRate((float) departmentRate)
+                .setInitiatorLevelRate((float) initiatorLevelRate)
+                .setApproverApprovalRate((float) approverRate)
+                .setInitiatorApprovalRate((float) initiatorRate);
 
         BigDecimal amount = extractAmountFromFormData(instance.getFormData());
         builder.setAmount(amount != null ? amount.doubleValue() : 0.0);
-
-        if (instance.getStartUserId() != null) {
-            SysUser initiator = userMapper.selectById(instance.getStartUserId());
-            if (initiator != null && initiator.getUserType() != null) {
-                builder.setInitiatorLevel(initiator.getUserType());
-            }
-        }
 
         return builder.build();
     }
@@ -345,9 +454,24 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
         LambdaQueryWrapper<WfApprovalTask> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(WfApprovalTask::getInstanceId, history.getInstanceId());
         wrapper.eq(WfApprovalTask::getAssigneeId, history.getOperatorId());
+        if (history.getNodeId() != null && !history.getNodeId().isBlank()) {
+            wrapper.eq(WfApprovalTask::getNodeId, history.getNodeId());
+        }
         wrapper.orderByDesc(WfApprovalTask::getCreateTime);
         wrapper.last("LIMIT 1");
-        return taskMapper.selectOne(wrapper);
+        WfApprovalTask task = taskMapper.selectOne(wrapper);
+        if (task != null) {
+            return task;
+        }
+        if (history.getNodeId() != null && !history.getNodeId().isBlank()) {
+            LambdaQueryWrapper<WfApprovalTask> fallbackWrapper = new LambdaQueryWrapper<>();
+            fallbackWrapper.eq(WfApprovalTask::getInstanceId, history.getInstanceId());
+            fallbackWrapper.eq(WfApprovalTask::getNodeId, history.getNodeId());
+            fallbackWrapper.orderByDesc(WfApprovalTask::getCreateTime);
+            fallbackWrapper.last("LIMIT 1");
+            return taskMapper.selectOne(fallbackWrapper);
+        }
+        return null;
     }
 
     private BigDecimal extractAmountFromFormData(Object formData) {

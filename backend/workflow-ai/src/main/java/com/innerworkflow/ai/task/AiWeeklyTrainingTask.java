@@ -1,6 +1,6 @@
 package com.innerworkflow.ai.task;
 
-import com.innerworkflow.ai.service.AiRecommendationService;
+import com.innerworkflow.common.service.AiRecommendationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
