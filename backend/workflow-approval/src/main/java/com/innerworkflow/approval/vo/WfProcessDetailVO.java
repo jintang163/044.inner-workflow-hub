@@ -32,6 +32,8 @@ public class WfProcessDetailVO implements Serializable {
 
     private Long ccUnreadCount;
 
+    private List<WfParallelProgressVO> parallelProgressList;
+
     private Boolean canWithdraw;
 
     private Boolean canApprove;

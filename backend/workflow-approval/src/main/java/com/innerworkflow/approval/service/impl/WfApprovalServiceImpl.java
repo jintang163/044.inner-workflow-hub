@@ -24,9 +24,7 @@ import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.flowable.bpmn.model.BpmnModel;
-import org.flowable.bpmn.model.FlowElement;
-import org.flowable.bpmn.model.UserTask;
+import org.flowable.bpmn.model.*;
 import org.flowable.engine.*;
 import org.flowable.engine.history.HistoricActivityInstance;
 import org.flowable.engine.history.HistoricProcessInstance;
@@ -42,6 +40,8 @@ import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
+
+import java.util.Date;
 
 @Slf4j
 @Service
@@ -215,6 +215,15 @@ public class WfApprovalServiceImpl implements WfApprovalService {
         }
         if (!TaskStatusEnum.PENDING.getCode().equals(approvalTask.getTaskStatus())) {
             throw new BusinessException(ResultCode.PARAM_ERROR, "任务已处理");
+        }
+
+        WfProcessInstance instance = processInstanceService.getById(approvalTask.getInstanceId());
+
+        try {
+            handleParallelGatewayRejection(instance, task, userId, dto);
+        } catch (Exception e) {
+            log.error("处理并行网关驳回失败, taskId={}, error={}", dto.getTaskId(), e.getMessage(), e);
+            throw new BusinessException(ResultCode.SYSTEM_ERROR, "处理驳回失败: " + e.getMessage());
         }
 
         Map<String, Object> variables = new HashMap<>();
@@ -606,6 +615,20 @@ public class WfApprovalServiceImpl implements WfApprovalService {
         detailVO.setCcTaskList(ccTaskList);
         detailVO.setCcUnreadCount(ccTaskService.countUnreadByInstanceId(instanceId));
 
+        try {
+            ProcessDefinition processDef = repositoryService.createProcessDefinitionQuery()
+                    .processDefinitionId(instance.getFlowableProcessDefId())
+                    .singleResult();
+            if (processDef != null) {
+                BpmnModel bpmnModel = repositoryService.getBpmnModel(processDef.getId());
+                List<WfParallelProgressVO> parallelProgressList = calculateParallelProgress(
+                        bpmnModel, instance, historicActivities, currentFlowableTasks);
+                detailVO.setParallelProgressList(parallelProgressList);
+            }
+        } catch (Exception e) {
+            log.error("计算并行进度失败, instanceId={}, error={}", instanceId, e.getMessage(), e);
+        }
+
         calcButtonPermissions(detailVO, instance);
 
         return detailVO;
@@ -878,5 +901,397 @@ public class WfApprovalServiceImpl implements WfApprovalService {
         } catch (Exception e) {
             log.warn("记录AI推荐采纳情况失败, taskId={}, error={}", task.getId(), e.getMessage());
         }
+    }
+
+    private void handleParallelGatewayRejection(WfProcessInstance instance, Task currentTask,
+                                                Long userId, WfApprovalActionDTO dto) {
+        if (instance == null) {
+            return;
+        }
+
+        ProcessDefinition processDef = repositoryService.createProcessDefinitionQuery()
+                .processDefinitionId(instance.getFlowableProcessDefId())
+                .singleResult();
+        if (processDef == null) {
+            return;
+        }
+
+        BpmnModel bpmnModel = repositoryService.getBpmnModel(processDef.getId());
+        Process process = bpmnModel.getProcesses().get(0);
+
+        ParallelGateway parallelGateway = findAncestorParallelGateway(
+                process, currentTask.getTaskDefinitionKey());
+        if (parallelGateway == null) {
+            return;
+        }
+
+        WfNodeConfig nodeConfig = nodeConfigService.getByNodeId(
+                instance.getProcessVersionId(), parallelGateway.getId());
+        if (nodeConfig == null || nodeConfig.getRefuseStrategy() == null) {
+            return;
+        }
+
+        Integer rejectStrategy = nodeConfig.getRefuseStrategy();
+        log.info("并行网关驳回策略, gatewayId={}, strategy={}", parallelGateway.getId(), rejectStrategy);
+
+        if (ParallelGatewayRejectStrategyEnum.TERMINATE_OTHERS.getCode().equals(rejectStrategy)) {
+            terminateOtherParallelBranches(instance, currentTask, parallelGateway, userId, dto);
+        } else if (ParallelGatewayRejectStrategyEnum.WAIT_ALL_COMPLETE.getCode().equals(rejectStrategy)) {
+            markParallelGatewayAsRejected(instance, parallelGateway, userId, dto);
+        }
+    }
+
+    private ParallelGateway findAncestorParallelGateway(Process process, String currentNodeId) {
+        FlowElement currentElement = process.getFlowElement(currentNodeId);
+        if (!(currentElement instanceof FlowNode)) {
+            return null;
+        }
+
+        Set<String> visited = new HashSet<>();
+        Queue<FlowNode> queue = new LinkedList<>();
+        queue.add((FlowNode) currentElement);
+
+        while (!queue.isEmpty()) {
+            FlowNode node = queue.poll();
+            if (visited.contains(node.getId())) {
+                continue;
+            }
+            visited.add(node.getId());
+
+            List<SequenceFlow> incomingFlows = node.getIncomingFlows();
+            if (incomingFlows == null || incomingFlows.isEmpty()) {
+                continue;
+            }
+
+            for (SequenceFlow incomingFlow : incomingFlows) {
+                FlowElement sourceElement = incomingFlow.getSourceRef();
+                if (sourceElement instanceof ParallelGateway) {
+                    return (ParallelGateway) sourceElement;
+                }
+                if (sourceElement instanceof FlowNode && !visited.contains(sourceElement.getId())) {
+                    queue.add((FlowNode) sourceElement);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private void terminateOtherParallelBranches(WfProcessInstance instance, Task currentTask,
+                                                ParallelGateway parallelGateway, Long userId,
+                                                WfApprovalActionDTO dto) {
+        String flowableInstId = instance.getFlowableProcessInstId();
+
+        List<Task> allActiveTasks = taskService.createTaskQuery()
+                .processInstanceId(flowableInstId)
+                .list();
+
+        List<ParallelGateway> gatewayPair = findParallelGatewayPair(
+                repositoryService.getBpmnModel(instance.getFlowableProcessDefId()), parallelGateway);
+
+        Set<String> taskDefKeysToTerminate = new HashSet<>();
+        for (SequenceFlow outgoingFlow : parallelGateway.getOutgoingFlows()) {
+            List<String> branchNodeIds = collectBranchNodes(outgoingFlow.getTargetRef());
+            boolean isCurrentBranch = branchNodeIds.contains(currentTask.getTaskDefinitionKey());
+            if (!isCurrentBranch) {
+                taskDefKeysToTerminate.addAll(branchNodeIds);
+            }
+        }
+
+        for (Task task : allActiveTasks) {
+            if (task.getId().equals(currentTask.getId())) {
+                continue;
+            }
+            if (taskDefKeysToTerminate.contains(task.getTaskDefinitionKey())) {
+                log.info("终止并行分支任务, taskId={}, taskKey={}", task.getId(), task.getTaskDefinitionKey());
+
+                taskService.addComment(task.getId(), flowableInstId, "TERMINATE",
+                        "并行分支因其他分支驳回而终止");
+
+                WfApprovalTask approvalTask = approvalTaskService.getByFlowableTaskId(task.getId());
+                if (approvalTask != null) {
+                    updateApprovalTask(approvalTask, TaskActionEnum.TERMINATE.getCode(),
+                            "并行分支因其他分支驳回而终止", userId, null, null);
+
+                    saveApprovalHistory(instance.getId(), null, task.getTaskDefinitionKey(),
+                            task.getName(), HistoryActivityTypeEnum.TERMINATE.getCode(),
+                            userId, SecurityUtils.getCurrentRealName(),
+                            null, null, null, null,
+                            "并行分支因其他分支驳回而终止", null, null,
+                            ChronoUnit.MILLIS.between(approvalTask.getAssignTime(), LocalDateTime.now()),
+                            LocalDateTime.now());
+                }
+
+                runtimeService.deleteProcessInstance(task.getExecutionId(),
+                        "并行分支终止: " + (dto.getActionRemark() != null ? dto.getActionRemark() : "其他分支驳回"));
+            }
+        }
+    }
+
+    private List<ParallelGateway> findParallelGatewayPair(BpmnModel bpmnModel, ParallelGateway forkGateway) {
+        List<ParallelGateway> result = new ArrayList<>();
+        result.add(forkGateway);
+
+        Process process = bpmnModel.getProcesses().get(0);
+        Collection<FlowElement> flowElements = process.getFlowElements();
+
+        for (SequenceFlow outgoingFlow : forkGateway.getOutgoingFlows()) {
+            FlowElement target = outgoingFlow.getTargetRef();
+            if (target instanceof ParallelGateway) {
+                result.add((ParallelGateway) target);
+                return result;
+            }
+
+            List<String> branchNodes = collectBranchNodes(target);
+            String lastNodeId = branchNodes.get(branchNodes.size() - 1);
+            FlowElement lastElement = process.getFlowElement(lastNodeId);
+            if (lastElement instanceof FlowNode) {
+                FlowNode lastNode = (FlowNode) lastElement;
+                for (SequenceFlow outFlow : lastNode.getOutgoingFlows()) {
+                    if (outFlow.getTargetRef() instanceof ParallelGateway) {
+                        result.add((ParallelGateway) outFlow.getTargetRef());
+                        return result;
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    private void markParallelGatewayAsRejected(WfProcessInstance instance, ParallelGateway parallelGateway,
+                                               Long userId, WfApprovalActionDTO dto) {
+        String flowableInstId = instance.getFlowableProcessInstId();
+        String gatewayId = parallelGateway.getId();
+
+        String rejectVarName = "parallelReject_" + gatewayId;
+        runtimeService.setVariable(flowableInstId, rejectVarName, true);
+        runtimeService.setVariable(flowableInstId, rejectVarName + "_userId", userId);
+        runtimeService.setVariable(flowableInstId, rejectVarName + "_remark",
+                dto.getActionRemark() != null ? dto.getActionRemark() : "");
+        runtimeService.setVariable(flowableInstId, rejectVarName + "_time",
+                new Date());
+
+        log.info("标记并行网关为驳回状态, gatewayId={}, instanceId={}", gatewayId, flowableInstId);
+    }
+
+    private List<WfParallelProgressVO> calculateParallelProgress(
+            BpmnModel bpmnModel, WfProcessInstance instance,
+            List<HistoricActivityInstance> historicActivities, List<Task> currentTasks) {
+
+        List<WfParallelProgressVO> result = new ArrayList<>();
+
+        Process process = bpmnModel.getProcesses().get(0);
+        Collection<FlowElement> flowElements = process.getFlowElements();
+
+        Set<String> completedNodeIds = historicActivities.stream()
+                .filter(h -> h.getEndTime() != null)
+                .map(HistoricActivityInstance::getActivityId)
+                .collect(Collectors.toSet());
+
+        Set<String> activeNodeIds = currentTasks.stream()
+                .map(Task::getTaskDefinitionKey)
+                .collect(Collectors.toSet());
+
+        Map<String, String> nodeIdToExecutionId = new HashMap<>();
+        for (Task task : currentTasks) {
+            nodeIdToExecutionId.put(task.getTaskDefinitionKey(), task.getExecutionId());
+        }
+
+        for (FlowElement flowElement : flowElements) {
+            if (!(flowElement instanceof ParallelGateway)) {
+                continue;
+            }
+
+            ParallelGateway forkGateway = (ParallelGateway) flowElement;
+            List<SequenceFlow> outgoingFlows = forkGateway.getOutgoingFlows();
+            if (outgoingFlows.size() < 2) {
+                continue;
+            }
+
+            WfParallelProgressVO progressVO = new WfParallelProgressVO();
+            progressVO.setParallelGatewayId(forkGateway.getId());
+            progressVO.setParallelGatewayName(forkGateway.getName() != null ? forkGateway.getName() : "并行分支");
+            progressVO.setTotalBranches(outgoingFlows.size());
+
+            WfNodeConfig nodeConfig = nodeConfigService.getByNodeId(
+                    instance.getProcessVersionId(), forkGateway.getId());
+            if (nodeConfig != null && nodeConfig.getRefuseStrategy() != null) {
+                progressVO.setRejectStrategy(nodeConfig.getRefuseStrategy());
+                ParallelGatewayRejectStrategyEnum strategyEnum =
+                        ParallelGatewayRejectStrategyEnum.getByCode(nodeConfig.getRefuseStrategy());
+                if (strategyEnum != null) {
+                    progressVO.setRejectStrategyName(strategyEnum.getDesc());
+                }
+            }
+
+            List<WfParallelBranchVO> branches = new ArrayList<>();
+            int completedCount = 0;
+            int activeCount = 0;
+            boolean hasRejection = false;
+
+            for (SequenceFlow flow : outgoingFlows) {
+                FlowElement targetElement = flow.getTargetRef();
+                WfParallelBranchVO branchVO = buildBranchVO(
+                        targetElement, flow, instance, completedNodeIds, activeNodeIds, historicActivities);
+                branches.add(branchVO);
+
+                if ("COMPLETED".equals(branchVO.getStatus())) {
+                    completedCount++;
+                } else if ("ACTIVE".equals(branchVO.getStatus())) {
+                    activeCount++;
+                }
+
+                if (Boolean.TRUE.equals(branchVO.getIsRejected())) {
+                    hasRejection = true;
+                }
+            }
+
+            progressVO.setCompletedBranches(completedCount);
+            progressVO.setActiveBranches(activeCount);
+            progressVO.setBranches(branches);
+            progressVO.setIsRejected(hasRejection);
+            progressVO.setProgressText(completedCount + "/" + outgoingFlows.size());
+
+            result.add(progressVO);
+        }
+
+        return result;
+    }
+
+    private WfParallelBranchVO buildBranchVO(FlowElement firstNode, SequenceFlow flow,
+                                             WfProcessInstance instance,
+                                             Set<String> completedNodeIds,
+                                             Set<String> activeNodeIds,
+                                             List<HistoricActivityInstance> historicActivities) {
+        WfParallelBranchVO branchVO = new WfParallelBranchVO();
+        branchVO.setBranchId(flow.getId());
+        branchVO.setBranchName(flow.getName() != null ? flow.getName() :
+                (firstNode.getName() != null ? firstNode.getName() : firstNode.getId()));
+
+        List<String> branchNodeIds = collectBranchNodes(firstNode);
+
+        boolean branchCompleted = false;
+        boolean branchActive = false;
+        LocalDateTime branchStartTime = null;
+        LocalDateTime branchEndTime = null;
+        Long currentApproverId = null;
+        String currentApproverName = null;
+        boolean isRejected = false;
+
+        for (int i = 0; i < branchNodeIds.size(); i++) {
+            String nodeId = branchNodeIds.get(i);
+            boolean nodeCompleted = completedNodeIds.contains(nodeId);
+            boolean nodeActive = activeNodeIds.contains(nodeId);
+
+            HistoricActivityInstance activity = historicActivities.stream()
+                    .filter(h -> nodeId.equals(h.getActivityId()))
+                    .findFirst()
+                    .orElse(null);
+
+            if (activity != null && i == 0) {
+                branchStartTime = activity.getStartTime() != null ?
+                        activity.getStartTime().toInstant().atZone(
+                                java.time.ZoneId.systemDefault()).toLocalDateTime() : null;
+            }
+
+            if (activity != null && activity.getDeleteReason() != null
+                    && activity.getDeleteReason().contains("驳")) {
+                isRejected = true;
+                branchEndTime = activity.getEndTime() != null ?
+                        activity.getEndTime().toInstant().atZone(
+                                java.time.ZoneId.systemDefault()).toLocalDateTime() : null;
+            }
+
+            if (nodeActive) {
+                branchActive = true;
+                WfApprovalTask approvalTask = approvalTaskService.getByInstanceIdAndNodeId(
+                        instance.getId(), nodeId);
+                if (approvalTask != null) {
+                    currentApproverId = approvalTask.getAssigneeId();
+                    if (approvalTask.getAssigneeId() != null) {
+                        com.innerworkflow.auth.entity.SysUser user =
+                                com.innerworkflow.common.util.SpringContextHolder
+                                        .getBean(com.innerworkflow.auth.service.SysUserService.class)
+                                        .getById(approvalTask.getAssigneeId());
+                        if (user != null) {
+                            currentApproverName = user.getRealName();
+                        }
+                    }
+                }
+                break;
+            }
+
+            if (!nodeCompleted && !nodeActive) {
+                break;
+            }
+
+            if (nodeCompleted && i == branchNodeIds.size() - 1) {
+                branchCompleted = true;
+                branchEndTime = activity != null && activity.getEndTime() != null ?
+                        activity.getEndTime().toInstant().atZone(
+                                java.time.ZoneId.systemDefault()).toLocalDateTime() : null;
+            }
+        }
+
+        List<String> completedNodes = branchNodeIds.stream()
+                .filter(completedNodeIds::contains)
+                .collect(Collectors.toList());
+        List<String> pendingNodes = branchNodeIds.stream()
+                .filter(n -> !completedNodeIds.contains(n))
+                .collect(Collectors.toList());
+
+        branchVO.setCompletedNodeIds(completedNodes);
+        branchVO.setPendingNodeIds(pendingNodes);
+        branchVO.setStartTime(branchStartTime);
+        branchVO.setEndTime(branchEndTime);
+        branchVO.setCurrentApproverId(currentApproverId);
+        branchVO.setCurrentApproverName(currentApproverName);
+        branchVO.setIsRejected(isRejected);
+
+        if (isRejected) {
+            branchVO.setStatus("REJECTED");
+            branchVO.setStatusName("已驳回");
+        } else if (branchCompleted) {
+            branchVO.setStatus("COMPLETED");
+            branchVO.setStatusName("已完成");
+        } else if (branchActive) {
+            branchVO.setStatus("ACTIVE");
+            branchVO.setStatusName("审批中");
+        } else {
+            branchVO.setStatus("PENDING");
+            branchVO.setStatusName("待执行");
+        }
+
+        return branchVO;
+    }
+
+    private List<String> collectBranchNodes(FlowElement startElement) {
+        List<String> nodeIds = new ArrayList<>();
+        FlowElement current = startElement;
+        Set<String> visited = new HashSet<>();
+
+        while (current != null && !visited.contains(current.getId())) {
+            visited.add(current.getId());
+
+            if (current instanceof UserTask || current instanceof ServiceTask
+                    || current instanceof ScriptTask || current instanceof CallActivity) {
+                nodeIds.add(current.getId());
+            }
+
+            if (current instanceof ParallelGateway) {
+                break;
+            }
+
+            FlowNode flowNode = (FlowNode) current;
+            if (flowNode.getOutgoingFlows() == null || flowNode.getOutgoingFlows().isEmpty()) {
+                break;
+            }
+
+            SequenceFlow outgoingFlow = flowNode.getOutgoingFlows().get(0);
+            current = outgoingFlow.getTargetRef();
+        }
+
+        return nodeIds;
     }
 }

@@ -260,6 +260,10 @@ public class WfDeployServiceImpl implements WfDeployService {
             for (FlowElement flowElement : flowElements) {
                 if (flowElement instanceof UserTask userTask) {
                     enhanceUserTask(userTask, nodeConfigMap.get(userTask.getId()));
+                } else if (flowElement instanceof ParallelGateway parallelGateway) {
+                    enhanceParallelGateway(parallelGateway, nodeConfigMap.get(parallelGateway.getId()));
+                } else if (flowElement instanceof ExclusiveGateway exclusiveGateway) {
+                    enhanceExclusiveGateway(exclusiveGateway, nodeConfigMap.get(exclusiveGateway.getId()));
                 } else if (flowElement instanceof SequenceFlow sequenceFlow) {
                     enhanceSequenceFlow(sequenceFlow, sequenceFlowConfigMap.get(sequenceFlow.getId()));
                 }
@@ -325,10 +329,27 @@ public class WfDeployServiceImpl implements WfDeployService {
     }
 
     private void addNodeConfigExtension(UserTask userTask, WfNodeConfig nodeConfig) {
+        addNodeConfigExtensionToFlowElement(userTask, nodeConfig);
+    }
+
+    private void addNodeConfigExtensionToFlowElement(FlowElement flowElement, WfNodeConfig nodeConfig) {
+        if (!(flowElement instanceof FlowNode)) {
+            return;
+        }
         try {
             String nodeConfigJson = objectMapper.writeValueAsString(nodeConfig);
-            userTask.addAttribute(new ExtensionAttribute(EXT_ATTR_NODE_CONFIG, FLOWABLE_EXT_NAMESPACE,
-                    EXT_ATTR_NODE_CONFIG, nodeConfigJson));
+            ExtensionAttribute attr = new ExtensionAttribute(
+                    EXT_ATTR_NODE_CONFIG, FLOWABLE_EXT_NAMESPACE,
+                    EXT_ATTR_NODE_CONFIG, nodeConfigJson);
+            if (flowElement instanceof UserTask userTask) {
+                userTask.addAttribute(attr);
+            } else if (flowElement instanceof ParallelGateway parallelGateway) {
+                parallelGateway.addAttribute(attr);
+            } else if (flowElement instanceof ExclusiveGateway exclusiveGateway) {
+                exclusiveGateway.addAttribute(attr);
+            } else if (flowElement instanceof InclusiveGateway inclusiveGateway) {
+                inclusiveGateway.addAttribute(attr);
+            }
         } catch (Exception e) {
             log.warn("序列化节点配置失败, nodeId={}", nodeConfig.getNodeId(), e);
         }
@@ -388,6 +409,36 @@ public class WfDeployServiceImpl implements WfDeployService {
         if (flowConfig.getConditionExpression() != null && !flowConfig.getConditionExpression().isEmpty()) {
             sequenceFlow.setConditionExpression(flowConfig.getConditionExpression());
         }
+    }
+
+    private void enhanceParallelGateway(ParallelGateway parallelGateway, WfNodeConfig nodeConfig) {
+        if (nodeConfig == null) {
+            return;
+        }
+
+        if (nodeConfig.getNodeName() != null && !nodeConfig.getNodeName().isEmpty()) {
+            parallelGateway.setName(nodeConfig.getNodeName());
+        }
+
+        if (nodeConfig.getRefuseStrategy() != null) {
+            parallelGateway.addAttribute(new ExtensionAttribute(
+                    "parallelRejectStrategy", FLOWABLE_EXT_NAMESPACE,
+                    "parallelRejectStrategy", String.valueOf(nodeConfig.getRefuseStrategy())));
+        }
+
+        addNodeConfigExtensionToFlowElement(parallelGateway, nodeConfig);
+    }
+
+    private void enhanceExclusiveGateway(ExclusiveGateway exclusiveGateway, WfNodeConfig nodeConfig) {
+        if (nodeConfig == null) {
+            return;
+        }
+
+        if (nodeConfig.getNodeName() != null && !nodeConfig.getNodeName().isEmpty()) {
+            exclusiveGateway.setName(nodeConfig.getNodeName());
+        }
+
+        addNodeConfigExtensionToFlowElement(exclusiveGateway, nodeConfig);
     }
 
     private Map<String, WfNodeConfig> buildNodeConfigMap(List<WfNodeConfig> nodeConfigs) {

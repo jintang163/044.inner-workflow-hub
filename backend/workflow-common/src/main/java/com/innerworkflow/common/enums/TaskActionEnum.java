@@ -51,7 +51,12 @@ public enum TaskActionEnum {
     /**
      * 超时自动处理
      */
-    TIMEOUT_AUTO(8, "超时自动");
+    TIMEOUT_AUTO(8, "超时自动"),
+
+    /**
+     * 终止
+     */
+    TERMINATE(9, "终止");
 
     /**
      * 操作码

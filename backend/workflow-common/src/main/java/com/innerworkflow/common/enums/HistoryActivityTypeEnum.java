@@ -66,7 +66,12 @@ public enum HistoryActivityTypeEnum {
     /**
      * 流程结束
      */
-    PROCESS_END(11, "流程结束");
+    PROCESS_END(11, "流程结束"),
+
+    /**
+     * 终止
+     */
+    TERMINATE(12, "终止");
 
     /**
      * 活动类型码
