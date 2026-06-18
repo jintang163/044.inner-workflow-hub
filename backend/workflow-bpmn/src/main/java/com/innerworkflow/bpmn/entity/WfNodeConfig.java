@@ -59,6 +59,8 @@ public class WfNodeConfig implements Serializable {
 
     private String refuseTargetNodeId;
 
+    private Integer parallelRejectStrategy;
+
     private Integer canAddSign;
 
     private Integer canTransfer;

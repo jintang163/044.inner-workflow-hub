@@ -111,6 +111,17 @@ public class WfApprovalTaskServiceImpl extends ServiceImpl<WfApprovalTaskMapper,
         return this.count(wrapper);
     }
 
+    @Override
+    public WfApprovalTask getByInstanceIdAndNodeId(Long instanceId, String nodeId) {
+        LambdaQueryWrapper<WfApprovalTask> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(WfApprovalTask::getInstanceId, instanceId);
+        wrapper.eq(WfApprovalTask::getNodeId, nodeId);
+        wrapper.eq(WfApprovalTask::getTaskStatus, TaskStatusEnum.PENDING.getCode());
+        wrapper.orderByDesc(WfApprovalTask::getId);
+        wrapper.last("LIMIT 1");
+        return this.getOne(wrapper, false);
+    }
+
     private WfApprovalTaskVO convertToVO(WfApprovalTask task) {
         WfApprovalTaskVO vo = new WfApprovalTaskVO();
         BeanUtils.copyProperties(task, vo);

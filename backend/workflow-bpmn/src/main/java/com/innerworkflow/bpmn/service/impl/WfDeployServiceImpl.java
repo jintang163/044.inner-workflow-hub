@@ -43,6 +43,7 @@ public class WfDeployServiceImpl implements WfDeployService {
     private static final String EXT_ATTR_ASSIGNEE_TYPE = "assigneeType";
     private static final String EXT_ATTR_NODE_CONFIG = "nodeConfig";
     private static final String TASK_LISTENER_BEAN = "taskAssigneeHandler";
+    private static final String PARALLEL_GATEWAY_JOIN_LISTENER_BEAN = "parallelGatewayJoinListener";
 
     private final WfProcessDefinitionService processDefinitionService;
     private final WfProcessVersionService processVersionService;
@@ -420,10 +421,20 @@ public class WfDeployServiceImpl implements WfDeployService {
             parallelGateway.setName(nodeConfig.getNodeName());
         }
 
-        if (nodeConfig.getRefuseStrategy() != null) {
+        if (nodeConfig.getParallelRejectStrategy() != null) {
             parallelGateway.addAttribute(new ExtensionAttribute(
                     "parallelRejectStrategy", FLOWABLE_EXT_NAMESPACE,
-                    "parallelRejectStrategy", String.valueOf(nodeConfig.getRefuseStrategy())));
+                    "parallelRejectStrategy", String.valueOf(nodeConfig.getParallelRejectStrategy())));
+        }
+
+        if (parallelGateway.getIncomingFlows() != null && parallelGateway.getIncomingFlows().size() >= 2) {
+            FlowableListener endListener = new FlowableListener();
+            endListener.setEvent("end");
+            endListener.setImplementationType("delegateExpression");
+            endListener.setImplementation("${" + PARALLEL_GATEWAY_JOIN_LISTENER_BEAN + "}");
+            parallelGateway.getExecutionListeners().add(endListener);
+
+            log.info("已为汇聚并行网关添加执行监听器, gatewayId={}", parallelGateway.getId());
         }
 
         addNodeConfigExtensionToFlowElement(parallelGateway, nodeConfig);
@@ -490,6 +501,7 @@ public class WfDeployServiceImpl implements WfDeployService {
             target.setEmptyAssigneeStrategy(source.getEmptyAssigneeStrategy());
             target.setRefuseStrategy(source.getRefuseStrategy());
             target.setRefuseTargetNodeId(source.getRefuseTargetNodeId());
+            target.setParallelRejectStrategy(source.getParallelRejectStrategy());
             target.setCanAddSign(source.getCanAddSign());
             target.setCanTransfer(source.getCanTransfer());
             target.setCanDelegate(source.getCanDelegate());

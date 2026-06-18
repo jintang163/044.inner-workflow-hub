@@ -29,4 +29,6 @@ public interface WfApprovalTaskService {
     boolean updateByFlowableTaskId(String flowableTaskId, WfApprovalTask task);
 
     long countTodoByUserId(Long userId);
+
+    WfApprovalTask getByInstanceIdAndNodeId(Long instanceId, String nodeId);
 }
