@@ -39,6 +39,8 @@ public class WfProcessDesignSaveDTO implements Serializable {
 
     private List<WfSequenceFlowConfigDTO> sequenceFlowConfigs;
 
+    private Map<String, Object> globalNotifyConfig;
+
     @Data
     public static class WfNodeConfigDTO implements Serializable {
 

@@ -164,6 +164,9 @@ workflow:
     expiration: 86400
     header: Authorization
     prefix: 'Bearer '
+  frontend:
+    url: http://localhost:3000
+    approval-detail-path: /approval/detail
   notify:
     dingtalk:
       enabled: false

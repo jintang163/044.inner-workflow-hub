@@ -33,5 +33,7 @@ public class WfProcessDesignVO implements Serializable {
 
     private List<WfSequenceFlowConfig> sequenceFlowConfigs;
 
+    private Map<String, Object> globalNotifyConfig;
+
     private Map<String, Object> formSchema;
 }

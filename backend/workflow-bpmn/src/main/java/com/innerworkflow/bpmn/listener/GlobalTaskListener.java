@@ -6,6 +6,8 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.innerworkflow.approval.entity.WfApprovalTask;
 import com.innerworkflow.approval.entity.WfCcTask;
 import com.innerworkflow.approval.entity.WfProcessInstance;
+import com.innerworkflow.approval.enums.CcTypeEnum;
+import com.innerworkflow.approval.handler.CcUserResolver;
 import com.innerworkflow.approval.service.WfApprovalTaskService;
 import com.innerworkflow.approval.service.WfCcTaskService;
 import com.innerworkflow.approval.service.WfProcessInstanceService;
@@ -14,6 +16,7 @@ import com.innerworkflow.bpmn.entity.WfProcessVersion;
 import com.innerworkflow.bpmn.handler.TaskAssigneeHandler;
 import com.innerworkflow.bpmn.service.WfNodeConfigService;
 import com.innerworkflow.bpmn.service.WfProcessVersionService;
+import com.innerworkflow.common.config.FrontendConfig;
 import com.innerworkflow.common.enums.TaskStatusEnum;
 import com.innerworkflow.common.util.JsonUtils;
 import com.innerworkflow.common.util.SpringContextHolder;
@@ -52,6 +55,8 @@ public class GlobalTaskListener implements FlowableEventListener {
     private final WfCcTaskService ccTaskService;
     private final WfProcessInstanceService processInstanceService;
     private final WfNotifyService notifyService;
+    private final CcUserResolver ccUserResolver;
+    private final FrontendConfig frontendConfig;
     private final RuntimeService runtimeService;
     private final TaskService taskService;
     private final org.flowable.engine.HistoryService historyService;
@@ -247,38 +252,81 @@ public class GlobalTaskListener implements FlowableEventListener {
             if (nodeConfig == null || nodeConfig.getNotifyConfig() == null) {
                 return;
             }
+
             Map<String, Object> notifyConfig = nodeConfig.getNotifyConfig();
-            Object ccUserIdsObj = notifyConfig.get("ccUserIds");
-            if (ccUserIdsObj == null) {
-                return;
+            Object nodeStartCcObj = notifyConfig.get("nodeStartCc");
+
+            if (nodeStartCcObj != null) {
+                List<Long> ccUserIds = ccUserResolver.resolveCcUsers(
+                        nodeStartCcObj, instance.getStartUserId(), instance.getStartDeptId());
+
+                if (ccUserIds != null && !ccUserIds.isEmpty()) {
+                    List<WfCcTask> ccTasks = createAndSaveCcTasks(
+                            instance, nodeConfig, ccUserIds, CcTypeEnum.AUTO_NODE_START);
+
+                    for (WfCcTask ccTask : ccTasks) {
+                        sendCcNotifyAsync(ccTask, instance);
+                    }
+                }
             }
-            List<Long> ccUserIds = null;
-            if (ccUserIdsObj instanceof List) {
-                ccUserIds = JsonUtils.parseObject(JsonUtils.toJsonString(ccUserIdsObj),
-                        new TypeReference<List<Long>>() {});
-            }
-            if (ccUserIds == null || ccUserIds.isEmpty()) {
+        } catch (Exception e) {
+            log.error("节点启动创建抄送任务失败, instanceId={}, error={}", instance.getId(), e.getMessage(), e);
+        }
+    }
+
+    private void createCcTasksOnNodeComplete(WfProcessInstance instance, WfNodeConfig nodeConfig, Task task) {
+        try {
+            if (nodeConfig == null || nodeConfig.getNotifyConfig() == null) {
                 return;
             }
 
-            List<WfCcTask> ccTasks = new ArrayList<>();
-            for (Long ccUserId : ccUserIds) {
-                WfCcTask ccTask = new WfCcTask();
-                ccTask.setInstanceId(instance.getId());
-                ccTask.setProcessKey(instance.getProcessKey());
-                ccTask.setCcUserId(ccUserId);
-                ccTask.setNodeId(nodeConfig.getNodeId());
-                ccTask.setNodeName(nodeConfig.getNodeName());
-                ccTask.setIsRead(0);
-                ccTask.setCcTime(LocalDateTime.now());
-                ccTasks.add(ccTask);
+            Map<String, Object> notifyConfig = nodeConfig.getNotifyConfig();
+            Object nodeCompleteCcObj = notifyConfig.get("nodeCompleteCc");
+
+            if (nodeCompleteCcObj != null) {
+                List<Long> ccUserIds = ccUserResolver.resolveCcUsers(
+                        nodeCompleteCcObj, instance.getStartUserId(), instance.getStartDeptId());
+
+                if (ccUserIds != null && !ccUserIds.isEmpty()) {
+                    List<WfCcTask> ccTasks = createAndSaveCcTasks(
+                            instance, nodeConfig, ccUserIds, CcTypeEnum.AUTO_NODE_COMPLETE);
+
+                    for (WfCcTask ccTask : ccTasks) {
+                        sendCcNotifyAsync(ccTask, instance);
+                    }
+                }
             }
-            ccTaskService.saveBatch(ccTasks);
-            log.info("创建抄送任务成功, instanceId={}, nodeId={}, ccUserCount={}",
-                    instance.getId(), nodeConfig.getNodeId(), ccUserIds.size());
         } catch (Exception e) {
-            log.error("创建抄送任务失败, instanceId={}, error={}", instance.getId(), e.getMessage(), e);
+            log.error("节点完成创建抄送任务失败, instanceId={}, nodeId={}, error={}",
+                    instance.getId(), nodeConfig.getNodeId(), e.getMessage(), e);
         }
+    }
+
+    private List<WfCcTask> createAndSaveCcTasks(WfProcessInstance instance, WfNodeConfig nodeConfig,
+                                                List<Long> ccUserIds, CcTypeEnum ccType) {
+        String detailUrl = frontendConfig.getApprovalDetailUrl(instance.getId());
+        List<WfCcTask> ccTasks = new ArrayList<>();
+
+        for (Long ccUserId : ccUserIds) {
+            WfCcTask ccTask = new WfCcTask();
+            ccTask.setInstanceId(instance.getId());
+            ccTask.setProcessKey(instance.getProcessKey());
+            ccTask.setCcUserId(ccUserId);
+            ccTask.setNodeId(nodeConfig.getNodeId());
+            ccTask.setNodeName(nodeConfig.getNodeName());
+            ccTask.setCcType(ccType.getCode());
+            ccTask.setIsRead(0);
+            ccTask.setCcTime(LocalDateTime.now());
+            ccTask.setRemindCount(0);
+            ccTask.setDetailUrl(detailUrl);
+            ccTasks.add(ccTask);
+        }
+
+        ccTaskService.saveBatch(ccTasks);
+        log.info("创建抄送任务成功, instanceId={}, nodeId={}, ccType={}, ccUserCount={}",
+                instance.getId(), nodeConfig.getNodeId(), ccType.getName(), ccUserIds.size());
+
+        return ccTasks;
     }
 
     @Async
@@ -363,6 +411,18 @@ public class GlobalTaskListener implements FlowableEventListener {
                 log.info("更新待办任务状态为已完成, flowableTaskId={}", task.getId());
             }
 
+            WfProcessInstance instance = processInstanceService.getByFlowableInstId(task.getProcessInstanceId());
+            if (instance != null) {
+                WfNodeConfig nodeConfig = null;
+                if (instance.getProcessVersionId() != null) {
+                    nodeConfig = nodeConfigService.getByNodeId(
+                            instance.getProcessVersionId(), task.getTaskDefinitionKey());
+                }
+                if (nodeConfig != null) {
+                    createCcTasksOnNodeComplete(instance, nodeConfig, task);
+                }
+            }
+
             sendTaskCompleteNotify(task);
 
         } catch (Exception e) {
@@ -419,6 +479,39 @@ public class GlobalTaskListener implements FlowableEventListener {
 
     private String generateTaskNo() {
         return "TK" + System.currentTimeMillis() + IdUtil.randomUUID().substring(0, 4).toUpperCase();
+    }
+
+    @Async
+    protected void sendCcNotifyAsync(WfCcTask ccTask, WfProcessInstance instance) {
+        try {
+            NotifySendDTO sendDTO = buildCcNotifySendDTO(ccTask, instance);
+            notifyService.sendNotify(sendDTO);
+            log.info("抄送通知已发送, ccTaskId={}, ccUserId={}", ccTask.getId(), ccTask.getCcUserId());
+        } catch (Exception e) {
+            log.error("发送抄送通知失败, ccTaskId={}, error={}", ccTask.getId(), e.getMessage(), e);
+        }
+    }
+
+    private NotifySendDTO buildCcNotifySendDTO(WfCcTask ccTask, WfProcessInstance instance) {
+        NotifySendDTO sendDTO = new NotifySendDTO();
+        sendDTO.setEventType(EventTypeEnum.CC_NOTIFY.getCode());
+        sendDTO.setBusinessType("WORKFLOW");
+        sendDTO.setInstanceId(ccTask.getInstanceId());
+        sendDTO.setReceiverUserId(ccTask.getCcUserId());
+
+        Map<String, Object> params = new HashMap<>();
+        params.put("processTitle", instance.getTitle());
+        params.put("instanceNo", instance.getInstanceNo());
+        params.put("processKey", instance.getProcessKey());
+        params.put("startUserId", instance.getStartUserId());
+        params.put("nodeId", ccTask.getNodeId());
+        params.put("nodeName", ccTask.getNodeName());
+        params.put("receiverUserId", ccTask.getCcUserId());
+        params.put("instanceId", instance.getId());
+        params.put("detailUrl", ccTask.getDetailUrl());
+
+        sendDTO.setParams(params);
+        return sendDTO;
     }
 
     @Override

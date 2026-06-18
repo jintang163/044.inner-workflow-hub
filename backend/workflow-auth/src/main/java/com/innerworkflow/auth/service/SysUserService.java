@@ -29,4 +29,10 @@ public interface SysUserService extends IService<SysUser> {
     List<String> getRolesByUserId(Long userId);
 
     List<String> getPermissionsByUserId(Long userId);
+
+    List<SysUser> listByDeptId(Long deptId);
+
+    List<SysUser> listByRoleId(Long roleId);
+
+    List<SysUser> listByRoleCode(String roleCode);
 }

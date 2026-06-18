@@ -1,24 +1,21 @@
 package com.innerworkflow.approval.entity;
 
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.innerworkflow.common.entity.BaseEntity;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.io.Serial;
-import java.io.Serializable;
 import java.time.LocalDateTime;
 
 @Data
+@EqualsAndHashCode(callSuper = true)
 @TableName("wf_cc_task")
-public class WfCcTask implements Serializable {
+public class WfCcTask extends BaseEntity {
 
     @Serial
     private static final long serialVersionUID = 1L;
-
-    @TableId(value = "id", type = IdType.AUTO)
-    private Long id;
 
     private Long instanceId;
 
@@ -30,6 +27,8 @@ public class WfCcTask implements Serializable {
 
     private String nodeName;
 
+    private Integer ccType;
+
     private Integer isRead;
 
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
@@ -38,6 +37,10 @@ public class WfCcTask implements Serializable {
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime ccTime;
 
+    private Integer remindCount;
+
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
-    private LocalDateTime createTime;
+    private LocalDateTime lastRemindTime;
+
+    private String detailUrl;
 }

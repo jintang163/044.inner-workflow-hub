@@ -1,6 +1,8 @@
 package com.innerworkflow.approval.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.innerworkflow.approval.dto.WfCcAddDTO;
+import com.innerworkflow.approval.dto.WfCcRemindDTO;
 import com.innerworkflow.approval.dto.WfCcTaskQueryDTO;
 import com.innerworkflow.approval.dto.WfDoneTaskQueryDTO;
 import com.innerworkflow.approval.dto.WfTodoTaskQueryDTO;
@@ -16,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Tag(name = "任务查询", description = "任务查询相关接口")
@@ -39,7 +42,7 @@ public class WfTaskController {
         return R.success(approvalTaskService.pageDone(queryDTO));
     }
 
-    @Operation(summary = "抄送任务列表")
+    @Operation(summary = "抄送任务列表（我的抄送）")
     @GetMapping("/cc")
     public R<IPage<WfCcTaskVO>> ccList(WfCcTaskQueryDTO queryDTO) {
         return R.success(ccTaskService.page(queryDTO));
@@ -49,6 +52,13 @@ public class WfTaskController {
     @PutMapping("/cc/{id}/read")
     public R<Void> markCcRead(@PathVariable Long id) {
         ccTaskService.markRead(id);
+        return R.success();
+    }
+
+    @Operation(summary = "批量标记抄送已读")
+    @PutMapping("/cc/read/batch")
+    public R<Void> markCcReadBatch(@RequestBody List<Long> ids) {
+        ccTaskService.markReadBatch(ids);
         return R.success();
     }
 
@@ -62,3 +72,4 @@ public class WfTaskController {
         return R.success(countMap);
     }
 }
+

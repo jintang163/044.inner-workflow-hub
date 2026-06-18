@@ -1,8 +1,15 @@
 package com.innerworkflow.bpmn.listener;
 
 import cn.hutool.core.util.StrUtil;
+import com.innerworkflow.approval.entity.WfCcTask;
 import com.innerworkflow.approval.entity.WfProcessInstance;
+import com.innerworkflow.approval.enums.CcTypeEnum;
+import com.innerworkflow.approval.handler.CcUserResolver;
+import com.innerworkflow.approval.service.WfCcTaskService;
 import com.innerworkflow.approval.service.WfProcessInstanceService;
+import com.innerworkflow.bpmn.entity.WfProcessVersion;
+import com.innerworkflow.bpmn.service.WfProcessVersionService;
+import com.innerworkflow.common.config.FrontendConfig;
 import com.innerworkflow.common.enums.InstanceStatusEnum;
 import com.innerworkflow.notify.dto.NotifySendDTO;
 import com.innerworkflow.notify.enums.EventTypeEnum;
@@ -21,7 +28,9 @@ import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Slf4j
@@ -31,6 +40,10 @@ public class GlobalProcessListener implements FlowableEventListener {
 
     private final WfProcessInstanceService processInstanceService;
     private final WfNotifyService notifyService;
+    private final WfCcTaskService ccTaskService;
+    private final WfProcessVersionService processVersionService;
+    private final CcUserResolver ccUserResolver;
+    private final FrontendConfig frontendConfig;
     private final org.flowable.engine.HistoryService historyService;
 
     @Override
@@ -148,6 +161,8 @@ public class GlobalProcessListener implements FlowableEventListener {
             processInstanceService.updateById(instance);
             log.info("流程状态已更新为结束, instanceId={}, status={}", instance.getId(), instance.getInstanceStatus());
 
+            createProcessEndCcTasks(instance);
+
             sendProcessEndNotify(instance);
         } catch (Exception e) {
             log.error("流程结束处理失败, processInstanceId={}, error={}",
@@ -223,6 +238,102 @@ public class GlobalProcessListener implements FlowableEventListener {
         params.put("duration", instance.getDuration());
         sendDTO.setParams(params);
 
+        return sendDTO;
+    }
+
+    private void createProcessEndCcTasks(WfProcessInstance instance) {
+        try {
+            WfProcessVersion processVersion = processVersionService.getById(instance.getProcessVersionId());
+            if (processVersion == null || processVersion.getGlobalNotifyConfig() == null) {
+                return;
+            }
+
+            Map<String, Object> globalNotifyConfig = processVersion.getGlobalNotifyConfig();
+            Object processEndCcObj = globalNotifyConfig.get("processEndCc");
+
+            if (processEndCcObj == null) {
+                return;
+            }
+
+            List<Long> ccUserIds = ccUserResolver.resolveCcUsers(
+                    processEndCcObj, instance.getStartUserId(), instance.getStartDeptId());
+
+            if (ccUserIds == null || ccUserIds.isEmpty()) {
+                return;
+            }
+
+            List<WfCcTask> ccTasks = createAndSaveProcessEndCcTasks(instance, ccUserIds, processVersion);
+
+            for (WfCcTask ccTask : ccTasks) {
+                sendProcessEndCcNotifyAsync(ccTask, instance);
+            }
+        } catch (Exception e) {
+            log.error("流程结束创建抄送任务失败, instanceId={}, error={}", instance.getId(), e.getMessage(), e);
+        }
+    }
+
+    private List<WfCcTask> createAndSaveProcessEndCcTasks(WfProcessInstance instance,
+                                                          List<Long> ccUserIds,
+                                                          WfProcessVersion processVersion) {
+        String detailUrl = frontendConfig.getApprovalDetailUrl(instance.getId());
+        List<WfCcTask> ccTasks = new ArrayList<>();
+
+        for (Long ccUserId : ccUserIds) {
+            WfCcTask ccTask = new WfCcTask();
+            ccTask.setInstanceId(instance.getId());
+            ccTask.setProcessKey(instance.getProcessKey());
+            ccTask.setCcUserId(ccUserId);
+            ccTask.setNodeId("PROCESS_END");
+            ccTask.setNodeName("流程结束");
+            ccTask.setCcType(CcTypeEnum.AUTO_PROCESS_END.getCode());
+            ccTask.setIsRead(0);
+            ccTask.setCcTime(LocalDateTime.now());
+            ccTask.setRemindCount(0);
+            ccTask.setDetailUrl(detailUrl);
+            ccTasks.add(ccTask);
+        }
+
+        ccTaskService.saveBatch(ccTasks);
+        log.info("流程结束创建抄送任务成功, instanceId={}, ccUserCount={}", instance.getId(), ccUserIds.size());
+
+        return ccTasks;
+    }
+
+    @Async
+    protected void sendProcessEndCcNotifyAsync(WfCcTask ccTask, WfProcessInstance instance) {
+        try {
+            NotifySendDTO sendDTO = buildCcNotifySendDTO(ccTask, instance);
+            notifyService.sendNotify(sendDTO);
+            log.info("流程结束抄送通知已发送, ccTaskId={}, ccUserId={}", ccTask.getId(), ccTask.getCcUserId());
+        } catch (Exception e) {
+            log.error("发送流程结束抄送通知失败, ccTaskId={}, error={}", ccTask.getId(), e.getMessage(), e);
+        }
+    }
+
+    private NotifySendDTO buildCcNotifySendDTO(WfCcTask ccTask, WfProcessInstance instance) {
+        NotifySendDTO sendDTO = new NotifySendDTO();
+        sendDTO.setEventType(EventTypeEnum.CC_NOTIFY.getCode());
+        sendDTO.setBusinessType("WORKFLOW");
+        sendDTO.setInstanceId(ccTask.getInstanceId());
+        sendDTO.setReceiverUserId(ccTask.getCcUserId());
+
+        Map<String, Object> params = new HashMap<>();
+        params.put("processTitle", instance.getTitle());
+        params.put("instanceNo", instance.getInstanceNo());
+        params.put("processKey", instance.getProcessKey());
+        params.put("startUserId", instance.getStartUserId());
+        params.put("nodeId", ccTask.getNodeId());
+        params.put("nodeName", ccTask.getNodeName());
+        params.put("receiverUserId", ccTask.getCcUserId());
+        params.put("instanceId", instance.getId());
+        params.put("detailUrl", ccTask.getDetailUrl());
+
+        InstanceStatusEnum statusEnum = InstanceStatusEnum.getByCode(instance.getInstanceStatus());
+        if (statusEnum != null) {
+            params.put("processResult", statusEnum.getDesc());
+        }
+
+        sendDTO.setParams(params);
         return sendDTO;
     }
 

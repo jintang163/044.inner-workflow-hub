@@ -31,6 +31,10 @@ public class WfCcTaskVO implements Serializable {
 
     private String nodeName;
 
+    private Integer ccType;
+
+    private String ccTypeName;
+
     private Integer isRead;
 
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
@@ -38,6 +42,13 @@ public class WfCcTaskVO implements Serializable {
 
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime ccTime;
+
+    private Integer remindCount;
+
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private LocalDateTime lastRemindTime;
+
+    private String detailUrl;
 
     private String title;
 

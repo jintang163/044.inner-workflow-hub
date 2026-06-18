@@ -70,6 +70,7 @@ public class WfDeployServiceImpl implements WfDeployService {
             designVO.setBpmnXml(currentVersion.getBpmnXml());
             designVO.setNodeConfigs(nodeConfigService.listByProcessVersionId(currentVersion.getId()));
             designVO.setSequenceFlowConfigs(sequenceFlowConfigService.listByProcessVersionId(currentVersion.getId()));
+            designVO.setGlobalNotifyConfig(currentVersion.getGlobalNotifyConfig());
         }
 
         return designVO;
@@ -99,9 +100,11 @@ public class WfDeployServiceImpl implements WfDeployService {
             draftVersion.setSuspendStatus(0);
             draftVersion.setFormId(processDefinition.getFormId());
             draftVersion.setFormVersion(1);
+            draftVersion.setGlobalNotifyConfig(saveDTO.getGlobalNotifyConfig());
             processVersionService.save(draftVersion);
         } else {
             draftVersion.setBpmnXml(saveDTO.getBpmnXml());
+            draftVersion.setGlobalNotifyConfig(saveDTO.getGlobalNotifyConfig());
             processVersionService.updateById(draftVersion);
         }
 
@@ -229,6 +232,7 @@ public class WfDeployServiceImpl implements WfDeployService {
         newVersion.setPublishTime(LocalDateTime.now());
         newVersion.setIsCurrent(1);
         newVersion.setSuspendStatus(0);
+        newVersion.setGlobalNotifyConfig(draftVersion.getGlobalNotifyConfig());
         processVersionService.save(newVersion);
 
         saveNodeConfigsForNewVersion(nodeConfigs, newVersion.getId(), processDefinition.getProcessKey());

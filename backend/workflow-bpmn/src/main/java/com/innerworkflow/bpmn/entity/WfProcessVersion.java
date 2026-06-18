@@ -1,5 +1,6 @@
 package com.innerworkflow.bpmn.entity;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Data;
@@ -7,9 +8,10 @@ import lombok.Data;
 import java.io.Serial;
 import java.io.Serializable;
 import java.time.LocalDateTime;
+import java.util.Map;
 
 @Data
-@TableName("wf_process_version")
+@TableName(value = "wf_process_version", autoResultMap = true)
 public class WfProcessVersion implements Serializable {
 
     @Serial
@@ -43,6 +45,9 @@ public class WfProcessVersion implements Serializable {
     private Integer isCurrent;
 
     private Integer suspendStatus;
+
+    @TableField(typeHandler = com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler.class)
+    private Map<String, Object> globalNotifyConfig;
 
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime createTime;

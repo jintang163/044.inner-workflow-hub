@@ -221,6 +221,21 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
         return sysMenuMapper.selectPermsByUserId(userId);
     }
 
+    @Override
+    public List<SysUser> listByDeptId(Long deptId) {
+        return this.baseMapper.selectByDeptId(deptId);
+    }
+
+    @Override
+    public List<SysUser> listByRoleId(Long roleId) {
+        return this.baseMapper.selectByRoleId(roleId);
+    }
+
+    @Override
+    public List<SysUser> listByRoleCode(String roleCode) {
+        return this.baseMapper.selectByRoleCode(roleCode);
+    }
+
     private void saveUserRoles(Long userId, List<Long> roleIds) {
         List<SysUserRole> userRoleList = roleIds.stream()
                 .map(roleId -> {
