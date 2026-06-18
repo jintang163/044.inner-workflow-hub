@@ -1,6 +1,7 @@
 package com.innerworkflow.auth.filter;
 
 import com.innerworkflow.auth.service.SysUserService;
+import com.innerworkflow.common.context.TenantContext;
 import com.innerworkflow.common.dto.LoginUserDTO;
 import com.innerworkflow.common.util.JwtUtils;
 import com.innerworkflow.common.util.SecurityUtils;
@@ -29,6 +30,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final SysUserService sysUserService;
 
     private static final String AUTHORIZATION_HEADER = "Authorization";
+    private static final String TENANT_ID_HEADER = "X-Tenant-Id";
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -45,6 +47,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     LoginUserDTO loginUser = sysUserService.getLoginUserByUsername(username);
                     if (loginUser != null) {
                         loginUser.setToken(token);
+
+                        String tenantIdStr = request.getHeader(TENANT_ID_HEADER);
+                        if (tenantIdStr != null && !tenantIdStr.isBlank()) {
+                            Long headerTenantId = Long.valueOf(tenantIdStr);
+                            if (loginUser.isSuperAdmin() || loginUser.belongsToTenant(headerTenantId)) {
+                                loginUser.setTenantId(headerTenantId);
+                                TenantContext.setTenantId(headerTenantId);
+                            }
+                        } else if (loginUser.getTenantId() != null) {
+                            TenantContext.setTenantId(loginUser.getTenantId());
+                        }
+
                         SecurityUtils.setCurrentUser(loginUser);
 
                         Set<SimpleGrantedAuthority> authorities = Collections.emptySet();
@@ -67,6 +81,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         try {
             filterChain.doFilter(request, response);
         } finally {
+            TenantContext.clear();
             SecurityUtils.clearCurrentUser();
             SecurityContextHolder.clearContext();
         }

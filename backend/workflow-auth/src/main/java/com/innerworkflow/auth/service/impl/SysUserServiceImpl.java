@@ -21,6 +21,10 @@ import com.innerworkflow.auth.service.SysUserService;
 import com.innerworkflow.auth.vo.UserVO;
 import com.innerworkflow.common.dto.LoginUserDTO;
 import com.innerworkflow.common.exception.BusinessException;
+import com.innerworkflow.tenant.entity.SysTenant;
+import com.innerworkflow.tenant.entity.SysTenantUser;
+import com.innerworkflow.tenant.mapper.SysTenantMapper;
+import com.innerworkflow.tenant.mapper.SysTenantUserMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -38,6 +42,8 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
     private final SysDeptMapper sysDeptMapper;
     private final SysMenuMapper sysMenuMapper;
     private final PasswordEncoder passwordEncoder;
+    private final SysTenantUserMapper sysTenantUserMapper;
+    private final SysTenantMapper sysTenantMapper;
 
     @Override
     public IPage<UserVO> getUserPage(UserQueryDTO queryDTO) {
@@ -153,6 +159,29 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
             }
         }
 
+        List<SysTenantUser> tenantUsers = sysTenantUserMapper.selectList(
+                new LambdaQueryWrapper<SysTenantUser>()
+                        .eq(SysTenantUser::getUserId, user.getId())
+                        .eq(SysTenantUser::getStatus, 1)
+        );
+
+        Set<Long> tenantIds = tenantUsers.stream()
+                .map(SysTenantUser::getTenantId)
+                .collect(Collectors.toSet());
+
+        Long defaultTenantId = null;
+        if (!tenantIds.isEmpty()) {
+            List<SysTenant> tenants = sysTenantMapper.selectList(
+                    new LambdaQueryWrapper<SysTenant>()
+                            .in(SysTenant::getId, tenantIds)
+                            .eq(SysTenant::getStatus, 1)
+                            .orderByAsc(SysTenant::getId)
+            );
+            if (!tenants.isEmpty()) {
+                defaultTenantId = tenants.get(0).getId();
+            }
+        }
+
         return LoginUserDTO.builder()
                 .userId(user.getId())
                 .username(user.getUsername())
@@ -161,6 +190,8 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
                 .deptName(deptName)
                 .roles(roles)
                 .permissions(permissions)
+                .tenantId(defaultTenantId)
+                .tenantIds(tenantIds)
                 .build();
     }
 

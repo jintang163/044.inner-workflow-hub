@@ -1,5 +1,6 @@
 package com.innerworkflow.common.util;
 
+import com.innerworkflow.common.context.TenantContext;
 import com.innerworkflow.common.dto.LoginUserDTO;
 import com.innerworkflow.common.enums.ResultCode;
 import com.innerworkflow.common.exception.BusinessException;
@@ -110,9 +111,20 @@ public class SecurityUtils {
         return user != null && user.hasPermission(permission);
     }
 
-    /**
-     * 设置当前线程的登录用户（用于异步任务等场景）
-     */
+    public static Long getCurrentTenantId() {
+        Long tenantId = TenantContext.getTenantId();
+        if (tenantId != null) {
+            return tenantId;
+        }
+        LoginUserDTO user = getUserFromHolder();
+        return user != null ? user.getTenantId() : null;
+    }
+
+    public static boolean isSuperAdmin() {
+        LoginUserDTO user = getUserFromHolder();
+        return user != null && user.isSuperAdmin();
+    }
+
     public static void setCurrentUser(LoginUserDTO user) {
         USER_HOLDER.set(user);
     }

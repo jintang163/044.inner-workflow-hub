@@ -1,6 +1,7 @@
 package com.innerworkflow.api.config;
 
 import com.baomidou.mybatisplus.core.handlers.MetaObjectHandler;
+import com.innerworkflow.common.context.TenantContext;
 import com.innerworkflow.common.util.SecurityUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.ibatis.reflection.MetaObject;
@@ -26,6 +27,7 @@ public class MyMetaObjectHandler implements MetaObjectHandler {
         this.strictInsertFill(metaObject, "createBy", Long.class, userId);
         this.strictInsertFill(metaObject, "updateBy", Long.class, userId);
         this.strictInsertFill(metaObject, "isDeleted", Integer.class, 0);
+        this.strictInsertFill(metaObject, "tenantId", Long.class, TenantContext.getTenantId());
     }
 
     @Override

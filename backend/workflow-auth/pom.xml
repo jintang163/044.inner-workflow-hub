@@ -18,6 +18,10 @@
             <artifactId>workflow-common</artifactId>
         </dependency>
         <dependency>
+            <groupId>com.innerworkflow</groupId>
+            <artifactId>workflow-tenant</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>

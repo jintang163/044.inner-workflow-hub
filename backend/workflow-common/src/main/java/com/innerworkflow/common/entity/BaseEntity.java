@@ -59,6 +59,9 @@ public class BaseEntity implements Serializable {
     /**
      * 逻辑删除标识（0-未删除，1-已删除）
      */
+    @TableField(value = "tenant_id", fill = FieldFill.INSERT)
+    private Long tenantId;
+
     @TableLogic
     @TableField(value = "is_deleted", fill = FieldFill.INSERT)
     @JsonIgnore

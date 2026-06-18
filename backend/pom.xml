@@ -18,6 +18,7 @@
         <module>workflow-form</module>
         <module>workflow-approval</module>
         <module>workflow-notify</module>
+        <module>workflow-tenant</module>
         <module>workflow-api</module>
     </modules>
 
@@ -176,6 +177,11 @@
             <dependency>
                 <groupId>com.innerworkflow</groupId>
                 <artifactId>workflow-notify</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.innerworkflow</groupId>
+                <artifactId>workflow-tenant</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>

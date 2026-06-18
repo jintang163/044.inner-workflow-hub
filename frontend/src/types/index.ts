@@ -33,6 +33,17 @@ export interface UserInfoVO {
   deptName: string
   roles: string[]
   permissions: string[]
+  tenantId: number
+  tenantIds: number[]
+  tenants: TenantSimpleVO[]
+  createTime: string
+}
+
+export interface TenantSimpleVO {
+  tenantId: number
+  tenantName: string
+  tenantCode: string
+  businessType: string
 }
 
 export interface MenuVO {

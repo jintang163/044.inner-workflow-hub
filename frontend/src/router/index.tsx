@@ -7,6 +7,7 @@ import MyApplyList from '@/pages/ApprovalCenter/MyApplyList'
 import CcList from '@/pages/ApprovalCenter/CcList'
 import ApplyForm from '@/pages/ApprovalCenter/ApplyForm'
 import ApprovalDetail from '@/pages/ApprovalCenter/ApprovalDetail'
+import TenantManagement from '@/pages/System/TenantManagement'
 
 const ProcessDefinition = () => <div>流程定义</div>
 const ProcessDesign = () => <div>流程设计</div>
@@ -69,7 +70,8 @@ export const routes: RouteObject[] = [
           { path: 'user', element: <UserManage /> },
           { path: 'role', element: <RoleManage /> },
           { path: 'menu', element: <MenuManage /> },
-          { path: 'dept', element: <DeptManage /> }
+          { path: 'dept', element: <DeptManage /> },
+          { path: 'tenant', element: <TenantManagement /> }
         ]
       },
       {

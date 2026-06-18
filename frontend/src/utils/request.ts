@@ -13,9 +13,12 @@ const service = axios.create({
 
 service.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    const { token } = useUserStore.getState()
+    const { token, currentTenantId } = useUserStore.getState()
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`
+    }
+    if (currentTenantId && config.headers) {
+      config.headers['X-Tenant-Id'] = String(currentTenantId)
     }
     return config
   },

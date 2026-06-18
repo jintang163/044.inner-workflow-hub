@@ -20,11 +20,13 @@ import {
   TeamOutlined,
   SafetyOutlined,
   MenuUnfoldOutlined,
-  MenuFoldOutlined
+  MenuFoldOutlined,
+  BankOutlined
 } from '@ant-design/icons'
 import type { MenuProps } from 'antd'
 import { useUserStore } from '@/store/user'
 import { authApi } from '@/api'
+import TenantSwitcher from '@/components/business/TenantSwitcher'
 
 const { Header, Sider, Content } = Layout
 
@@ -68,7 +70,8 @@ const menuItems: MenuItem[] = [
       { key: '/system/user', icon: <UserOutlined />, label: '用户管理' },
       { key: '/system/role', icon: <SafetyOutlined />, label: '角色管理' },
       { key: '/system/menu', icon: <MenuUnfoldOutlined />, label: '菜单管理' },
-      { key: '/system/dept', icon: <TeamOutlined />, label: '部门管理' }
+      { key: '/system/dept', icon: <TeamOutlined />, label: '部门管理' },
+      { key: '/system/tenant', icon: <BankOutlined />, label: '租户管理' }
     ]
   },
   {
@@ -204,12 +207,15 @@ export default function MainLayout() {
             onClick={() => setCollapsed(!collapsed)}
             style={{ fontSize: '16px', width: 64, height: 64 }}
           />
-          <Dropdown menu={{ items: userMenuItems, onClick: handleUserMenuClick }} placement="bottomRight">
-            <div style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: 8 }}>
-              <Avatar icon={<UserOutlined />} src={userInfo?.avatar} />
-              <span>{userInfo?.nickname || userInfo?.username || '未登录'}</span>
-            </div>
-          </Dropdown>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <TenantSwitcher />
+            <Dropdown menu={{ items: userMenuItems, onClick: handleUserMenuClick }} placement="bottomRight">
+              <div style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: 8 }}>
+                <Avatar icon={<UserOutlined />} src={userInfo?.avatar} />
+                <span>{userInfo?.nickname || userInfo?.username || '未登录'}</span>
+              </div>
+            </Dropdown>
+          </div>
         </Header>
         <Content
           style={{

@@ -16,6 +16,10 @@ import com.innerworkflow.common.dto.LoginUserDTO;
 import com.innerworkflow.common.exception.BusinessException;
 import com.innerworkflow.common.util.JwtUtils;
 import com.innerworkflow.common.util.SecurityUtils;
+import com.innerworkflow.tenant.entity.SysTenant;
+import com.innerworkflow.tenant.entity.SysTenantUser;
+import com.innerworkflow.tenant.mapper.SysTenantMapper;
+import com.innerworkflow.tenant.mapper.SysTenantUserMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -35,6 +39,8 @@ public class AuthServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
     private final SysUserService sysUserService;
     private final SysMenuService sysMenuService;
     private final PasswordEncoder passwordEncoder;
+    private final SysTenantUserMapper sysTenantUserMapper;
+    private final SysTenantMapper sysTenantMapper;
 
     @Override
     public LoginVO login(LoginDTO loginDTO) {
@@ -129,6 +135,33 @@ public class AuthServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
             throw BusinessException.notFound("用户不存在");
         }
 
+        List<SysTenantUser> tenantUsers = sysTenantUserMapper.selectList(
+                new LambdaQueryWrapper<SysTenantUser>()
+                        .eq(SysTenantUser::getUserId, user.getId())
+                        .eq(SysTenantUser::getStatus, 1)
+        );
+
+        Set<Long> tenantIds = tenantUsers.stream()
+                .map(SysTenantUser::getTenantId)
+                .collect(java.util.stream.Collectors.toSet());
+
+        List<UserInfoVO.TenantSimpleVO> tenantSimpleList = java.util.Collections.emptyList();
+        if (!tenantIds.isEmpty()) {
+            List<SysTenant> tenants = sysTenantMapper.selectList(
+                    new LambdaQueryWrapper<SysTenant>()
+                            .in(SysTenant::getId, tenantIds)
+                            .eq(SysTenant::getStatus, 1)
+            );
+            tenantSimpleList = tenants.stream()
+                    .map(t -> UserInfoVO.TenantSimpleVO.builder()
+                            .tenantId(t.getId())
+                            .tenantName(t.getTenantName())
+                            .tenantCode(t.getTenantCode())
+                            .businessType(t.getBusinessType())
+                            .build())
+                    .collect(java.util.stream.Collectors.toList());
+        }
+
         return UserInfoVO.builder()
                 .userId(user.getId())
                 .username(user.getUsername())
@@ -142,6 +175,9 @@ public class AuthServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
                 .deptName(loginUser.getDeptName())
                 .roles(loginUser.getRoles())
                 .permissions(loginUser.getPermissions())
+                .tenantId(loginUser.getTenantId())
+                .tenantIds(tenantIds)
+                .tenants(tenantSimpleList)
                 .createTime(user.getCreateTime())
                 .build();
     }

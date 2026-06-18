@@ -12,7 +12,8 @@ import {
   ProcessDefinitionVO,
   WfTaskVO,
   WfProcessInstanceVO,
-  WfApprovalHistoryVO
+  WfApprovalHistoryVO,
+  TenantSimpleVO
 } from '@/types'
 import {
   ApprovalTaskVO,
@@ -29,6 +30,13 @@ import {
   DelegateDTO,
   StartProcessDTO
 } from '@/types/approval'
+import {
+  TenantVO,
+  TenantStatsVO,
+  TenantUserVO,
+  TenantRegisterDTO,
+  TenantUpdateDTO
+} from '@/types/tenant'
 
 export const authApi = {
   login: (data: LoginDTO) => request<LoginVO>({ url: '/auth/login', method: 'post', data }),
@@ -175,6 +183,31 @@ export const notifyApi = {
   logGet: (id: number) => request<any>({ url: `/notify/log/${id}`, method: 'get' })
 }
 
+export const tenantApi = {
+  register: (data: TenantRegisterDTO) =>
+    request<void>({ url: '/tenant/register', method: 'post', data }),
+  page: (params?: any) =>
+    request<PageResult<TenantVO>>({ url: '/tenant/page', method: 'get', params }),
+  get: (id: number) => request<TenantVO>({ url: `/tenant/${id}`, method: 'get' }),
+  approve: (id: number) =>
+    request<void>({ url: `/tenant/approve/${id}`, method: 'put' }),
+  reject: (id: number) =>
+    request<void>({ url: `/tenant/reject/${id}`, method: 'put' }),
+  update: (data: TenantUpdateDTO) =>
+    request<void>({ url: '/tenant', method: 'put', data }),
+  remove: (id: number) =>
+    request<void>({ url: `/tenant/${id}`, method: 'delete' }),
+  listByUser: () => request<TenantVO[]>({ url: '/tenant/list-by-user', method: 'get' }),
+  getStats: (id: number) =>
+    request<TenantStatsVO>({ url: `/tenant/${id}/stats`, method: 'get' }),
+  pageUsers: (id: number, params?: any) =>
+    request<PageResult<TenantUserVO>>({ url: `/tenant/${id}/users`, method: 'get', params }),
+  addTenantUser: (id: number, userId: number, tenantRole: string) =>
+    request<void>({ url: `/tenant/${id}/users`, method: 'post', params: { userId, tenantRole } }),
+  removeTenantUser: (id: number, userId: number) =>
+    request<void>({ url: `/tenant/${id}/users/${userId}`, method: 'delete' })
+}
+
 const api = {
   auth: authApi,
   user: userApi,
@@ -184,7 +217,8 @@ const api = {
   process: processApi,
   form: formApi,
   approval: approvalApi,
-  notify: notifyApi
+  notify: notifyApi,
+  tenant: tenantApi
 }
 
 export default api

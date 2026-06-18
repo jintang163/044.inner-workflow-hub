@@ -62,9 +62,10 @@ public class LoginUserDTO implements Serializable {
      */
     private Set<String> permissions;
 
-    /**
-     * Token值
-     */
+    private Long tenantId;
+
+    private Set<Long> tenantIds;
+
     private String token;
 
     /**
@@ -79,5 +80,13 @@ public class LoginUserDTO implements Serializable {
      */
     public boolean hasPermission(String permission) {
         return permissions != null && permissions.contains(permission);
+    }
+
+    public boolean isSuperAdmin() {
+        return roles != null && roles.contains("SUPER_ADMIN");
+    }
+
+    public boolean belongsToTenant(Long tid) {
+        return tenantIds != null && tenantIds.contains(tid);
     }
 }
