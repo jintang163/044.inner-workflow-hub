@@ -3,11 +3,15 @@ package com.innerworkflow.bpmn.listener;
 import cn.hutool.core.util.StrUtil;
 import com.innerworkflow.approval.dto.WfCcAddDTO;
 import com.innerworkflow.approval.entity.WfProcessInstance;
+import com.innerworkflow.approval.entity.WfProcessInstanceRelation;
 import com.innerworkflow.approval.enums.CcTypeEnum;
 import com.innerworkflow.approval.handler.CcUserResolver;
 import com.innerworkflow.approval.service.WfCcTaskService;
+import com.innerworkflow.approval.service.WfProcessInstanceRelationService;
 import com.innerworkflow.approval.service.WfProcessInstanceService;
+import com.innerworkflow.bpmn.entity.WfNodeConfig;
 import com.innerworkflow.bpmn.entity.WfProcessVersion;
+import com.innerworkflow.bpmn.service.WfNodeConfigService;
 import com.innerworkflow.bpmn.service.WfProcessVersionService;
 import com.innerworkflow.common.enums.InstanceStatusEnum;
 import com.innerworkflow.notify.dto.NotifySendDTO;
@@ -15,13 +19,20 @@ import com.innerworkflow.notify.enums.EventTypeEnum;
 import com.innerworkflow.notify.service.WfNotifyService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.flowable.bpmn.model.CallActivity;
+import org.flowable.bpmn.model.FlowElement;
 import org.flowable.common.engine.api.delegate.event.FlowableEngineEntityEvent;
 import org.flowable.common.engine.api.delegate.event.FlowableEngineEventType;
 import org.flowable.common.engine.api.delegate.event.FlowableEvent;
 import org.flowable.common.engine.api.delegate.event.FlowableEventListener;
+import org.flowable.engine.RepositoryService;
+import org.flowable.engine.delegate.DelegateExecution;
+import org.flowable.engine.delegate.ExecutionListener;
 import org.flowable.engine.repository.ProcessDefinition;
+import org.flowable.engine.runtime.Execution;
 import org.flowable.engine.runtime.ProcessInstance;
 import org.flowable.engine.history.HistoricProcessInstance;
+import org.flowable.engine.HistoryService;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 
@@ -35,14 +46,18 @@ import java.util.Map;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class GlobalProcessListener implements FlowableEventListener {
+public class GlobalProcessListener implements FlowableEventListener, ExecutionListener {
 
     private final WfProcessInstanceService processInstanceService;
     private final WfNotifyService notifyService;
     private final WfCcTaskService ccTaskService;
     private final WfProcessVersionService processVersionService;
     private final CcUserResolver ccUserResolver;
-    private final org.flowable.engine.HistoryService historyService;
+    private final HistoryService historyService;
+    private final RepositoryService repositoryService;
+    private final WfNodeConfigService nodeConfigService;
+    private final WfProcessInstanceRelationService processInstanceRelationService;
+    private final org.flowable.engine.RuntimeService runtimeService;
 
     @Override
     public void onEvent(FlowableEvent event) {
@@ -93,10 +108,73 @@ public class GlobalProcessListener implements FlowableEventListener {
 
         try {
             sendProcessStartNotify(processInstance);
+
+            handleSubProcessStart(processInstance);
         } catch (Exception e) {
             log.error("流程开始处理失败, processInstanceId={}, error={}",
                     processInstance.getId(), e.getMessage(), e);
         }
+    }
+
+    private void handleSubProcessStart(ProcessInstance processInstance) {
+        String superExecutionId = processInstance.getSuperExecutionId();
+        if (superExecutionId == null) {
+            return;
+        }
+
+        log.info("检测到子流程启动, childProcessInstId={}, superExecutionId={}",
+                processInstance.getId(), superExecutionId);
+
+        Execution superExecution = runtimeService.createExecutionQuery()
+                .executionId(superExecutionId)
+                .singleResult();
+        if (superExecution == null) {
+            log.warn("未找到父执行流, superExecutionId={}", superExecutionId);
+            return;
+        }
+
+        String parentFlowableInstId = superExecution.getProcessInstanceId();
+        WfProcessInstance parentInstance = processInstanceService.getByFlowableInstId(parentFlowableInstId);
+        if (parentInstance == null) {
+            log.warn("未找到父流程实例, parentFlowableInstId={}", parentFlowableInstId);
+            return;
+        }
+
+        ProcessDefinition processDef = repositoryService.createProcessDefinitionQuery()
+                .processDefinitionId(processInstance.getProcessDefinitionId())
+                .singleResult();
+
+        String callActivityNodeId = superExecution.getActivityId();
+        String callActivityNodeName = callActivityNodeId;
+
+        try {
+            org.flowable.bpmn.model.BpmnModel bpmnModel = repositoryService.getBpmnModel(
+                    parentInstance.getFlowableProcessDefId());
+            FlowElement flowElement = bpmnModel.getProcesses().get(0)
+                    .getFlowElement(callActivityNodeId);
+            if (flowElement instanceof CallActivity callActivity) {
+                callActivityNodeName = callActivity.getName() != null ?
+                        callActivity.getName() : callActivityNodeId;
+            }
+        } catch (Exception e) {
+            log.warn("获取CallActivity名称失败, nodeId={}, error={}", callActivityNodeId, e.getMessage());
+        }
+
+        WfProcessInstanceRelation relation = new WfProcessInstanceRelation();
+        relation.setParentInstanceId(parentInstance.getId());
+        relation.setParentFlowableInstId(parentFlowableInstId);
+        relation.setParentNodeId(callActivityNodeId);
+        relation.setChildFlowableInstId(processInstance.getId());
+        relation.setChildProcessKey(processInstance.getProcessDefinitionKey());
+        relation.setChildProcessName(processDef != null ? processDef.getName() : processInstance.getProcessDefinitionKey());
+        relation.setCallActivityNodeId(callActivityNodeId);
+        relation.setCallActivityNodeName(callActivityNodeName);
+        relation.setRelationType(1);
+        relation.setCreateTime(LocalDateTime.now());
+        processInstanceRelationService.save(relation);
+
+        log.info("已建立主子流程关联, parentInstanceId={}, childFlowableInstId={}",
+                parentInstance.getId(), processInstance.getId());
     }
 
     @Async
@@ -285,5 +363,66 @@ public class GlobalProcessListener implements FlowableEventListener {
     @Override
     public String getOnTransaction() {
         return null;
+    }
+
+    @Override
+    public void notify(DelegateExecution execution) {
+        String eventName = execution.getEventName();
+        String activityId = execution.getCurrentActivityId();
+        String processInstId = execution.getProcessInstanceId();
+
+        log.info("CallActivity执行监听器触发, event={}, activityId={}, processInstId={}",
+                eventName, activityId, processInstId);
+
+        try {
+            if ("start".equals(eventName)) {
+                handleCallActivityStart(execution);
+            } else if ("end".equals(eventName)) {
+                handleCallActivityEnd(execution);
+            }
+        } catch (Exception e) {
+            log.error("CallActivity监听器处理失败, event={}, activityId={}, error={}",
+                    eventName, activityId, e.getMessage(), e);
+        }
+    }
+
+    private void handleCallActivityStart(DelegateExecution execution) {
+        String activityId = execution.getCurrentActivityId();
+        String processDefId = execution.getProcessDefinitionId();
+        String processInstId = execution.getProcessInstanceId();
+
+        log.info("CallActivity开始, activityId={}, processInstId={}", activityId, processInstId);
+
+        WfProcessInstance instance = processInstanceService.getByFlowableInstId(processInstId);
+        if (instance == null) {
+            return;
+        }
+
+        WfNodeConfig nodeConfig = nodeConfigService.getByNodeId(
+                instance.getProcessVersionId(), activityId);
+        if (nodeConfig != null && nodeConfig.getNotifyConfig() != null) {
+            log.info("CallActivity节点通知配置, nodeId={}, notifyConfig={}",
+                    activityId, nodeConfig.getNotifyConfig());
+        }
+    }
+
+    private void handleCallActivityEnd(DelegateExecution execution) {
+        String activityId = execution.getCurrentActivityId();
+        String processInstId = execution.getProcessInstanceId();
+
+        log.info("CallActivity结束, activityId={}, processInstId={}", activityId, processInstId);
+
+        WfProcessInstance instance = processInstanceService.getByFlowableInstId(processInstId);
+        if (instance == null) {
+            return;
+        }
+
+        Map<String, Object> variables = runtimeService.getVariables(execution.getId());
+        log.debug("CallActivity结束变量, variables={}", variables);
+
+        Object parallelGatewayRejected = variables.get("parallelGatewayRejected");
+        if (parallelGatewayRejected != null && Boolean.TRUE.equals(parallelGatewayRejected)) {
+            log.info("检测到并行网关驳回标记, processInstId={}", processInstId);
+        }
     }
 }

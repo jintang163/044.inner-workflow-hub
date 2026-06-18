@@ -61,6 +61,14 @@ public class WfNodeConfig implements Serializable {
 
     private Integer parallelRejectStrategy;
 
+    private String callActivityProcessKey;
+
+    @TableField(typeHandler = com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler.class)
+    private Map<String, String> inputVariableMapping;
+
+    @TableField(typeHandler = com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler.class)
+    private Map<String, String> outputVariableMapping;
+
     private Integer canAddSign;
 
     private Integer canTransfer;

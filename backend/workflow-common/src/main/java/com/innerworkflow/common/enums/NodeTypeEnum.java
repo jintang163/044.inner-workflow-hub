@@ -34,6 +34,11 @@ public enum NodeTypeEnum {
     PARALLEL_GATEWAY("PARALLEL_GATEWAY", "并行分支"),
 
     /**
+     * 调用活动（子流程）
+     */
+    CALL_ACTIVITY("CALL_ACTIVITY", "子流程"),
+
+    /**
      * 结束事件
      */
     END_EVENT("END_EVENT", "结束节点");

@@ -34,6 +34,10 @@ public class WfProcessDetailVO implements Serializable {
 
     private List<WfParallelProgressVO> parallelProgressList;
 
+    private List<WfProcessInstanceRelationVO> childProcessInstanceList;
+
+    private WfProcessInstanceRelationVO parentProcessInstance;
+
     private Boolean canWithdraw;
 
     private Boolean canApprove;

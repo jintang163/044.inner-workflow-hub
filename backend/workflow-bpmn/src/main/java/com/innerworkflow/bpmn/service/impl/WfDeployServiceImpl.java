@@ -44,6 +44,7 @@ public class WfDeployServiceImpl implements WfDeployService {
     private static final String EXT_ATTR_NODE_CONFIG = "nodeConfig";
     private static final String TASK_LISTENER_BEAN = "taskAssigneeHandler";
     private static final String PARALLEL_GATEWAY_JOIN_LISTENER_BEAN = "parallelGatewayJoinListener";
+    private static final String PROCESS_LISTENER_BEAN = "globalProcessListener";
 
     private final WfProcessDefinitionService processDefinitionService;
     private final WfProcessVersionService processVersionService;
@@ -265,6 +266,8 @@ public class WfDeployServiceImpl implements WfDeployService {
                     enhanceParallelGateway(parallelGateway, nodeConfigMap.get(parallelGateway.getId()));
                 } else if (flowElement instanceof ExclusiveGateway exclusiveGateway) {
                     enhanceExclusiveGateway(exclusiveGateway, nodeConfigMap.get(exclusiveGateway.getId()));
+                } else if (flowElement instanceof CallActivity callActivity) {
+                    enhanceCallActivity(callActivity, nodeConfigMap.get(callActivity.getId()));
                 } else if (flowElement instanceof SequenceFlow sequenceFlow) {
                     enhanceSequenceFlow(sequenceFlow, sequenceFlowConfigMap.get(sequenceFlow.getId()));
                 }
@@ -350,6 +353,8 @@ public class WfDeployServiceImpl implements WfDeployService {
                 exclusiveGateway.addAttribute(attr);
             } else if (flowElement instanceof InclusiveGateway inclusiveGateway) {
                 inclusiveGateway.addAttribute(attr);
+            } else if (flowElement instanceof CallActivity callActivity) {
+                callActivity.addAttribute(attr);
             }
         } catch (Exception e) {
             log.warn("序列化节点配置失败, nodeId={}", nodeConfig.getNodeId(), e);
@@ -452,6 +457,61 @@ public class WfDeployServiceImpl implements WfDeployService {
         addNodeConfigExtensionToFlowElement(exclusiveGateway, nodeConfig);
     }
 
+    private void enhanceCallActivity(CallActivity callActivity, WfNodeConfig nodeConfig) {
+        if (nodeConfig == null) {
+            return;
+        }
+
+        if (nodeConfig.getNodeName() != null && !nodeConfig.getNodeName().isEmpty()) {
+            callActivity.setName(nodeConfig.getNodeName());
+        }
+
+        if (nodeConfig.getCallActivityProcessKey() != null && !nodeConfig.getCallActivityProcessKey().isEmpty()) {
+            callActivity.setCalledElement(nodeConfig.getCallActivityProcessKey());
+        }
+
+        callActivity.setInheritVariables(false);
+        callActivity.setInheritBusinessKey(true);
+
+        Map<String, String> inputMapping = nodeConfig.getInputVariableMapping();
+        if (inputMapping != null && !inputMapping.isEmpty()) {
+            for (Map.Entry<String, String> entry : inputMapping.entrySet()) {
+                String source = entry.getKey();
+                String target = entry.getValue();
+                IOParameter parameter = new IOParameter();
+                parameter.setSource(source);
+                parameter.setTarget(target);
+                callActivity.getInParameters().add(parameter);
+            }
+        }
+
+        Map<String, String> outputMapping = nodeConfig.getOutputVariableMapping();
+        if (outputMapping != null && !outputMapping.isEmpty()) {
+            for (Map.Entry<String, String> entry : outputMapping.entrySet()) {
+                String source = entry.getKey();
+                String target = entry.getValue();
+                IOParameter parameter = new IOParameter();
+                parameter.setSource(source);
+                parameter.setTarget(target);
+                callActivity.getOutParameters().add(parameter);
+            }
+        }
+
+        FlowableListener startListener = new FlowableListener();
+        startListener.setEvent("start");
+        startListener.setImplementationType("delegateExpression");
+        startListener.setImplementation("${" + PROCESS_LISTENER_BEAN + "}");
+        callActivity.getExecutionListeners().add(startListener);
+
+        FlowableListener endListener = new FlowableListener();
+        endListener.setEvent("end");
+        endListener.setImplementationType("delegateExpression");
+        endListener.setImplementation("${" + PROCESS_LISTENER_BEAN + "}");
+        callActivity.getExecutionListeners().add(endListener);
+
+        addNodeConfigExtensionToFlowElement(callActivity, nodeConfig);
+    }
+
     private Map<String, WfNodeConfig> buildNodeConfigMap(List<WfNodeConfig> nodeConfigs) {
         Map<String, WfNodeConfig> map = new HashMap<>();
         if (nodeConfigs != null) {
@@ -502,6 +562,9 @@ public class WfDeployServiceImpl implements WfDeployService {
             target.setRefuseStrategy(source.getRefuseStrategy());
             target.setRefuseTargetNodeId(source.getRefuseTargetNodeId());
             target.setParallelRejectStrategy(source.getParallelRejectStrategy());
+            target.setCallActivityProcessKey(source.getCallActivityProcessKey());
+            target.setInputVariableMapping(source.getInputVariableMapping());
+            target.setOutputVariableMapping(source.getOutputVariableMapping());
             target.setCanAddSign(source.getCanAddSign());
             target.setCanTransfer(source.getCanTransfer());
             target.setCanDelegate(source.getCanDelegate());

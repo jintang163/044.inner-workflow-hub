@@ -67,6 +67,7 @@ public class WfApprovalServiceImpl implements WfApprovalService {
     private final WfNotifyService notifyService;
     private final AiRecommendationService aiRecommendationService;
     private final WfAiRecommendationMapper aiRecommendationMapper;
+    private final WfProcessInstanceRelationService processInstanceRelationService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -624,6 +625,16 @@ public class WfApprovalServiceImpl implements WfApprovalService {
             } catch (Exception e) {
                 log.error("计算并行进度失败, instanceId={}, error={}", instanceId, e.getMessage(), e);
             }
+        }
+
+        List<WfProcessInstanceRelationVO> childProcessList = processInstanceRelationService.listByParentInstanceId(instanceId);
+        detailVO.setChildProcessInstanceList(childProcessList);
+
+        WfProcessInstanceRelation parentRelation = processInstanceRelationService.getByChildInstanceId(instanceId);
+        if (parentRelation != null) {
+            WfProcessInstanceRelationVO parentVO = new WfProcessInstanceRelationVO();
+            org.springframework.beans.BeanUtils.copyProperties(parentRelation, parentVO);
+            detailVO.setParentProcessInstance(parentVO);
         }
 
         calcButtonPermissions(detailVO, instance);
