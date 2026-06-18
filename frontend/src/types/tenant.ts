@@ -60,3 +60,28 @@ export interface TenantUpdateDTO {
   remark?: string
   status?: number
 }
+
+export interface TenantRoleVO {
+  id: number
+  tenantId: number
+  roleName: string
+  roleCode: string
+  roleSort: number
+  dataScope: number
+  status: number
+  remark: string
+  menuIds: number[]
+  createTime: string
+}
+
+export interface TenantRoleSaveDTO {
+  id?: number
+  tenantId: number
+  roleName: string
+  roleCode: string
+  roleSort?: number
+  dataScope?: number
+  status?: number
+  remark?: string
+  menuIds?: number[]
+}

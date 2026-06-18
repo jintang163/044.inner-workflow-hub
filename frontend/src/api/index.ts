@@ -35,14 +35,18 @@ import {
   TenantStatsVO,
   TenantUserVO,
   TenantRegisterDTO,
-  TenantUpdateDTO
+  TenantUpdateDTO,
+  TenantRoleVO,
+  TenantRoleSaveDTO
 } from '@/types/tenant'
 
 export const authApi = {
   login: (data: LoginDTO) => request<LoginVO>({ url: '/auth/login', method: 'post', data }),
   logout: () => request<void>({ url: '/auth/logout', method: 'post' }),
   getUserInfo: () => request<UserInfoVO>({ url: '/auth/user-info', method: 'get' }),
-  getMenus: () => request<MenuVO[]>({ url: '/auth/menus', method: 'get' })
+  getMenus: () => request<MenuVO[]>({ url: '/auth/menus', method: 'get' }),
+  switchTenant: (tenantId: number) =>
+    request<UserInfoVO>({ url: '/auth/switch-tenant', method: 'post', params: { tenantId } })
 }
 
 export const userApi = {
@@ -205,7 +209,22 @@ export const tenantApi = {
   addTenantUser: (id: number, userId: number, tenantRole: string) =>
     request<void>({ url: `/tenant/${id}/users`, method: 'post', params: { userId, tenantRole } }),
   removeTenantUser: (id: number, userId: number) =>
-    request<void>({ url: `/tenant/${id}/users/${userId}`, method: 'delete' })
+    request<void>({ url: `/tenant/${id}/users/${userId}`, method: 'delete' }),
+
+  listRoles: (tenantId: number) =>
+    request<TenantRoleVO[]>({ url: '/tenant/role/list', method: 'get', params: { tenantId } }),
+  getRole: (id: number) =>
+    request<TenantRoleVO>({ url: `/tenant/role/${id}`, method: 'get' }),
+  saveRole: (data: TenantRoleSaveDTO) =>
+    request<void>({ url: '/tenant/role', method: 'post', data }),
+  updateRole: (data: TenantRoleSaveDTO) =>
+    request<void>({ url: '/tenant/role', method: 'put', data }),
+  removeRole: (id: number) =>
+    request<void>({ url: `/tenant/role/${id}`, method: 'delete' }),
+  assignUserRole: (tenantId: number, userId: number, tenantRoleId: number) =>
+    request<void>({ url: '/tenant/role/assign-user', method: 'post', params: { tenantId, userId, tenantRoleId } }),
+  removeUserRole: (tenantId: number, userId: number, tenantRoleId: number) =>
+    request<void>({ url: '/tenant/role/remove-user', method: 'delete', params: { tenantId, userId, tenantRoleId } })
 }
 
 const api = {

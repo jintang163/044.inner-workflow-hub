@@ -74,12 +74,15 @@ public class SysTenantServiceImpl implements SysTenantService {
         tenant.setStatus(0);
         tenantMapper.insert(tenant);
 
-        SysTenantUser tenantUser = new SysTenantUser();
-        tenantUser.setTenantId(tenant.getId());
-        tenantUser.setUserId(SecurityUtils.getCurrentUserId());
-        tenantUser.setTenantRole("TENANT_ADMIN");
-        tenantUser.setStatus(1);
-        tenantUserMapper.insert(tenantUser);
+        Long currentUserId = SecurityUtils.getCurrentUserIdOrNull();
+        if (currentUserId != null) {
+            SysTenantUser tenantUser = new SysTenantUser();
+            tenantUser.setTenantId(tenant.getId());
+            tenantUser.setUserId(currentUserId);
+            tenantUser.setTenantRole("TENANT_ADMIN");
+            tenantUser.setStatus(1);
+            tenantUserMapper.insert(tenantUser);
+        }
     }
 
     @Override

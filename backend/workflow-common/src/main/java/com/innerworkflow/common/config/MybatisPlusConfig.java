@@ -18,13 +18,14 @@ public class MybatisPlusConfig {
     private static final Set<String> IGNORE_TENANT_TABLES = Set.of(
             "sys_tenant",
             "sys_tenant_user",
+            "sys_tenant_role",
+            "sys_tenant_role_menu",
+            "sys_tenant_user_role",
             "sys_user",
-            "sys_role",
             "sys_user_role",
             "sys_role_menu",
             "sys_role_dept",
-            "sys_menu",
-            "sys_department"
+            "sys_menu"
     );
 
     @Bean

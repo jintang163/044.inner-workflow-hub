@@ -25,6 +25,7 @@ import com.innerworkflow.tenant.entity.SysTenant;
 import com.innerworkflow.tenant.entity.SysTenantUser;
 import com.innerworkflow.tenant.mapper.SysTenantMapper;
 import com.innerworkflow.tenant.mapper.SysTenantUserMapper;
+import com.innerworkflow.tenant.mapper.SysTenantRoleMenuMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -44,6 +45,7 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
     private final PasswordEncoder passwordEncoder;
     private final SysTenantUserMapper sysTenantUserMapper;
     private final SysTenantMapper sysTenantMapper;
+    private final SysTenantRoleMenuMapper sysTenantRoleMenuMapper;
 
     @Override
     public IPage<UserVO> getUserPage(UserQueryDTO queryDTO) {
@@ -179,6 +181,17 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
             );
             if (!tenants.isEmpty()) {
                 defaultTenantId = tenants.get(0).getId();
+            }
+        }
+
+        if (defaultTenantId != null) {
+            List<String> tenantRoleCodes = sysTenantRoleMenuMapper.selectRoleCodesByTenantUser(defaultTenantId, user.getId());
+            if (!tenantRoleCodes.isEmpty()) {
+                roles.addAll(tenantRoleCodes);
+            }
+            List<String> tenantPerms = sysTenantRoleMenuMapper.selectPermsByTenantUser(defaultTenantId, user.getId());
+            if (!tenantPerms.isEmpty()) {
+                permissions.addAll(tenantPerms);
             }
         }
 

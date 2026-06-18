@@ -110,7 +110,7 @@ export default function MainLayout() {
   const { token } = theme.useToken()
   const navigate = useNavigate()
   const location = useLocation()
-  const { userInfo, logout, setUserInfo, setMenus } = useUserStore()
+  const { userInfo, logout, setUserInfo, setMenus, currentTenantId } = useUserStore()
 
   useEffect(() => {
     if (!useUserStore.getState().token) {
@@ -226,7 +226,7 @@ export default function MainLayout() {
             minHeight: 280
           }}
         >
-          <Outlet />
+          <Outlet key={currentTenantId} />
         </Content>
       </Layout>
     </Layout>

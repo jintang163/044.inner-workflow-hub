@@ -16,6 +16,9 @@ public class SysRole extends BaseEntity {
     @Serial
     private static final long serialVersionUID = 1L;
 
+    @TableField("tenant_id")
+    private Long tenantId;
+
     @TableField("role_name")
     private String roleName;
 

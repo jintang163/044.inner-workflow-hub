@@ -4,9 +4,12 @@ import com.innerworkflow.auth.dto.LoginDTO;
 import com.innerworkflow.auth.dto.RegisterDTO;
 import com.innerworkflow.auth.service.AuthService;
 import com.innerworkflow.auth.service.SysMenuService;
+import com.innerworkflow.auth.service.SysUserService;
 import com.innerworkflow.auth.vo.LoginVO;
 import com.innerworkflow.auth.vo.RouterVO;
 import com.innerworkflow.auth.vo.UserInfoVO;
+import com.innerworkflow.common.context.TenantContext;
+import com.innerworkflow.common.dto.LoginUserDTO;
 import com.innerworkflow.common.result.R;
 import com.innerworkflow.common.util.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
@@ -25,6 +28,7 @@ public class AuthController {
 
     private final AuthService authService;
     private final SysMenuService sysMenuService;
+    private final SysUserService sysUserService;
 
     @Operation(summary = "用户登录")
     @PostMapping("/login")
@@ -60,5 +64,31 @@ public class AuthController {
         Long userId = SecurityUtils.getCurrentUserId();
         List<RouterVO> routers = sysMenuService.buildRouters(userId);
         return R.success(routers);
+    }
+
+    @Operation(summary = "切换租户上下文")
+    @PostMapping("/switch-tenant")
+    public R<UserInfoVO> switchTenant(@RequestParam Long tenantId) {
+        LoginUserDTO loginUser = SecurityUtils.getCurrentUser();
+        if (loginUser == null) {
+            return R.error(401, "未登录");
+        }
+        if (!loginUser.isSuperAdmin() && !loginUser.belongsToTenant(tenantId)) {
+            return R.error(403, "无权切换到该租户");
+        }
+
+        TenantContext.setTenantId(tenantId);
+        loginUser.setTenantId(tenantId);
+        SecurityUtils.setCurrentUser(loginUser);
+
+        LoginUserDTO refreshed = sysUserService.getLoginUserByUsername(loginUser.getUsername());
+        if (refreshed != null) {
+            refreshed.setTenantId(tenantId);
+            TenantContext.setTenantId(tenantId);
+            SecurityUtils.setCurrentUser(refreshed);
+        }
+
+        UserInfoVO userInfo = authService.getUserInfo();
+        return R.success(userInfo);
     }
 }

@@ -45,6 +45,7 @@ public class SecurityConfig {
                                 "/api/auth/login",
                                 "/api/auth/register",
                                 "/api/auth/captcha",
+                                "/tenant/register",
                                 "/doc.html",
                                 "/webjars/**",
                                 "/v3/api-docs/**",
