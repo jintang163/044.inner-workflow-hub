@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react'
-import { Button, Space, Modal, Form, Input, Upload, Alert } from 'antd'
+import { Button, Space, Modal, Form, Input, Upload, Alert, Tag, Tooltip } from 'antd'
 import {
   CheckOutlined,
   CloseOutlined,
@@ -9,6 +9,7 @@ import {
   RollbackOutlined,
   ExclamationCircleOutlined
 } from '@ant-design/icons'
+import type { ApprovalHistoryVO } from '@/types/approval'
 import type { UploadFile, UploadProps } from 'antd/es/upload/interface'
 import SignaturePad, { SignaturePadRef } from './SignaturePad'
 import TransferModal from './TransferModal'
@@ -22,8 +23,9 @@ const { confirm } = Modal
 
 interface ApprovalActionBarProps {
   task: ApprovalTaskVO
+  history?: ApprovalHistoryVO[]
   onApprove?: (data: { comment?: string; signatureUrl?: string; attachmentIds?: number[] }) => Promise<void> | void
-  onReject?: (data: { comment?: string; signatureUrl?: string; attachmentIds?: number[]; targetNodeId?: string }) => Promise<void> | void
+  onReject?: (data: { comment?: string; signatureUrl?: string; attachmentIds?: number[]; targetNodeId?: string; targetNodeName?: string; resetFormData?: boolean }) => Promise<void> | void
   onTransfer?: (data: any) => Promise<void> | void
   onAddSign?: (data: any) => Promise<void> | void
   onDelegate?: (data: any) => Promise<void> | void
@@ -141,6 +143,7 @@ const BaseApprovalModal: React.FC<ApprovalModalProps> = ({
 
 const ApprovalActionBar: React.FC<ApprovalActionBarProps> = ({
   task,
+  history = [],
   onApprove,
   onReject,
   onTransfer,
@@ -154,6 +157,10 @@ const ApprovalActionBar: React.FC<ApprovalActionBarProps> = ({
   const [addSignModalOpen, setAddSignModalOpen] = useState(false)
   const [delegateModalOpen, setDelegateModalOpen] = useState(false)
   const [customRejectOpen, setCustomRejectOpen] = useState(false)
+
+  const rejectCount = task.rejectCount ?? 0
+  const maxRejectCount = task.maxRejectCount ?? 5
+  const reachMaxReject = rejectCount >= maxRejectCount
 
   const handleQuickApprove = () => {
     if (task.needComment || task.needSignature) {
@@ -179,6 +186,44 @@ const ApprovalActionBar: React.FC<ApprovalActionBarProps> = ({
     }
   }
 
+  const rejectButton = task.canReject ? (
+    <Tooltip
+      title={
+        reachMaxReject
+          ? `已达到最大驳回次数（${maxRejectCount}次），无法继续驳回`
+          : `支持驳回至之前任意节点（跨级驳回），当前已驳回 ${rejectCount}/${maxRejectCount} 次`
+      }
+    >
+      <Button
+        danger
+        icon={<RollbackOutlined />}
+        size="large"
+        onClick={() => !reachMaxReject && setCustomRejectOpen(true)}
+        loading={loading}
+        disabled={reachMaxReject}
+      >
+        <Space size={4}>
+          <span>驳回</span>
+          {rejectCount > 0 && (
+            <Tag color={reachMaxReject ? 'red' : 'orange'} style={{ margin: 0 }}>
+              {rejectCount}/{maxRejectCount}
+            </Tag>
+          )}
+        </Space>
+      </Button>
+    </Tooltip>
+  ) : (
+    <Button
+      danger
+      icon={<CloseOutlined />}
+      size="large"
+      onClick={handleRejectClick}
+      loading={loading}
+    >
+      拒绝
+    </Button>
+  )
+
   return (
     <div
       style={{
@@ -200,15 +245,18 @@ const ApprovalActionBar: React.FC<ApprovalActionBarProps> = ({
         >
           同意
         </Button>
-        <Button
-          danger
-          icon={<CloseOutlined />}
-          size="large"
-          onClick={handleRejectClick}
-          loading={loading}
-        >
-          拒绝
-        </Button>
+        {!task.canReject && (
+          <Button
+            danger
+            icon={<CloseOutlined />}
+            size="large"
+            onClick={handleRejectClick}
+            loading={loading}
+          >
+            拒绝
+          </Button>
+        )}
+        {rejectButton}
         {task.canTransfer && (
           <Button
             icon={<SwapOutlined />}
@@ -237,16 +285,6 @@ const ApprovalActionBar: React.FC<ApprovalActionBarProps> = ({
             loading={loading}
           >
             委派
-          </Button>
-        )}
-        {task.canReject && (
-          <Button
-            icon={<RollbackOutlined />}
-            size="large"
-            onClick={() => setCustomRejectOpen(true)}
-            loading={loading}
-          >
-            驳回
           </Button>
         )}
       </Space>
@@ -315,6 +353,7 @@ const ApprovalActionBar: React.FC<ApprovalActionBarProps> = ({
       <RejectModal
         open={customRejectOpen}
         task={task}
+        history={history}
         onCancel={() => setCustomRejectOpen(false)}
         onOk={async (data) => {
           await onReject?.(data)

@@ -50,6 +50,9 @@ export interface ApprovalTaskVO {
   canWithdraw?: boolean
   needSignature: boolean
   needComment: boolean
+  rejectCount?: number
+  maxRejectCount?: number
+  rejectableNodeIds?: string[]
   aiRecommendation?: import('./ai').AiRecommendationVO
   aiRecommendationId?: number
 }
@@ -99,6 +102,8 @@ export interface ProcessInstanceVO {
   currentNodeIds: string[]
   currentNodeNames?: string[]
   canWithdraw?: boolean
+  rejectCount?: number
+  maxRejectCount?: number
   multiInstanceSignList?: MultiInstanceSignVO[]
 }
 
@@ -150,6 +155,8 @@ export interface ApproveDTO {
 
 export interface RejectDTO extends ApproveDTO {
   targetNodeId?: string
+  targetNodeName?: string
+  resetFormData?: boolean
 }
 
 export interface TransferDTO extends ApproveDTO {

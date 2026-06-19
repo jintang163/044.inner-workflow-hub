@@ -106,6 +106,15 @@ const ApprovalDetail: React.FC = () => {
   const isStarter = instance?.startUserId === 1
   const hasPendingTask = currentTask?.taskStatus === 'PENDING'
 
+  const rejectCount = history.filter(h => h.status === 'rejected').length
+  const maxRejectCount = instance?.maxRejectCount ?? currentTask?.maxRejectCount ?? 5
+
+  const mergedTask = currentTask ? {
+    ...currentTask,
+    rejectCount: currentTask.rejectCount ?? rejectCount,
+    maxRejectCount: currentTask.maxRejectCount ?? maxRejectCount
+  } : null
+
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
@@ -417,6 +426,11 @@ const ApprovalDetail: React.FC = () => {
                     {statusTagText[instance.instanceStatus]}
                   </Tag>
                 )}
+                {rejectCount > 0 && (
+                  <Tag color={rejectCount >= maxRejectCount ? 'red' : 'orange'} style={{ fontSize: 14, padding: '4px 12px' }}>
+                    已驳回 {rejectCount}/{maxRejectCount} 次
+                  </Tag>
+                )}
               </Space>
 
               <Space size={8} wrap>
@@ -602,10 +616,11 @@ const ApprovalDetail: React.FC = () => {
           </Col>
         </Row>
 
-        {hasPendingTask && currentTask && (
+        {hasPendingTask && mergedTask && (
           <div style={{ marginTop: -16, marginLeft: -16, marginRight: -16, marginBottom: -16 }}>
             <ApprovalActionBar
-              task={currentTask}
+              task={mergedTask}
+              history={history}
               onApprove={handleApprove}
               onReject={handleReject}
               onTransfer={handleTransfer}
