@@ -42,6 +42,18 @@ function collectDependencies(node: ConditionNode): string[] {
   return Array.from(new Set(deps))
 }
 
+function getDepAccessor(depPath: string, index: number): string {
+  if (!depPath.includes('.')) {
+    return `$deps[${index}]`
+  }
+  const parts = depPath.split('.')
+  let result = `$deps[${index}]`
+  for (let i = 1; i < parts.length; i++) {
+    result = `(${result}?.${parts[i]})`
+  }
+  return result
+}
+
 function buildSimpleConditionExpr(
   cond: SimpleCondition,
   depMap: Map<string, number>
@@ -53,7 +65,7 @@ function buildSimpleConditionExpr(
       idx = depMap.size
       depMap.set(dep, idx)
     }
-    const depRef = `$deps[${idx}]`
+    const depRef = getDepAccessor(dep, idx)
     const v = JSON.stringify(cond.value)
 
     switch (cond.operator) {
@@ -97,12 +109,12 @@ function buildSimpleConditionExpr(
         break
       case 'empty':
         parts.push(
-          `!${depRef} || ${depRef} === '' || (Array.isArray(${depRef}) && ${depRef}.length === 0)`
+          `!${depRef} || ${depRef} === '' || (Array.isArray(${depRef}) && ${depRef}.length === 0) || (typeof ${depRef} === 'object' && ${depRef} !== null && Object.keys(${depRef}).length === 0)`
         )
         break
       case 'notEmpty':
         parts.push(
-          `${depRef} && ${depRef} !== '' && (!Array.isArray(${depRef}) || ${depRef}.length > 0)`
+          `${depRef} && ${depRef} !== '' && (!Array.isArray(${depRef}) || ${depRef}.length > 0) && (!(typeof ${depRef} === 'object' && ${depRef} !== null) || Object.keys(${depRef}).length > 0)`
         )
         break
       case 'in': {
@@ -123,7 +135,7 @@ function buildSimpleConditionExpr(
         parts.push('true')
     }
   }
-  return parts.length > 0 ? parts.join(' && ') : 'true'
+  return parts.length > 0 ? parts.join(' || ') : 'true'
 }
 
 function buildGroupConditionExpr(
@@ -151,16 +163,20 @@ function buildConditionExpr(
 function buildActionState(
   action: string,
   actionValue: any,
-  conditionExpr: string
+  conditionExpr: string,
+  _field: any
 ): Record<string, any> {
   const fulfillState: Record<string, any> = {}
   const isPositive = actionValue !== false
 
   switch (action) {
-    case 'visible':
-      fulfillState.visible = `{{ ${isPositive ? conditionExpr : `!(${conditionExpr})`} }}`
-      fulfillState.display = `{{ ${isPositive ? conditionExpr : `!(${conditionExpr})`} ? 'visible' : 'none' }}`
+    case 'visible': {
+      const visibleExpr = isPositive ? conditionExpr : `!(${conditionExpr})`
+      fulfillState.visible = `{{ ${visibleExpr} }}`
+      fulfillState.display = `{{ ${visibleExpr} ? 'visible' : 'none' }}`
+      fulfillState.required = `{{ ${visibleExpr} ? (self.required !== undefined ? self.required : (Array.isArray(self.data) && self.data.length > 0)) : false }}`
       break
+    }
     case 'required':
       fulfillState.required = `{{ ${isPositive ? conditionExpr : `!(${conditionExpr})`} }}`
       break
@@ -192,11 +208,11 @@ function buildV1Reactions(field: any): any[] {
       value
     }
     const conditionExpr = buildSimpleConditionExpr(fakeCond, depMap)
-    const sortedDeps: string[] = []
-    depMap.forEach((_, k) => sortedDeps.push(k))
-    const orderedDeps = dependencies.filter(d => sortedDeps.includes(d))
+    const sortedDeps: string[] = new Array(depMap.size)
+    depMap.forEach((idx, name) => { sortedDeps[idx] = name })
+    const orderedDeps = sortedDeps.filter(Boolean)
 
-    const fulfillState = buildActionState(action, actionValue, conditionExpr)
+    const fulfillState = buildActionState(action, actionValue, conditionExpr, field)
     return {
       dependencies: orderedDeps,
       fulfill: { state: fulfillState }
@@ -212,12 +228,15 @@ function buildV2Reactions(field: any): any[] {
     if (rule.enabled === false) continue
     const depMap = new Map<string, number>()
     const conditionExpr = buildConditionExpr(rule.condition, depMap)
-    const dependencies = collectDependencies(rule.condition)
+    const depsArray: string[] = new Array(depMap.size)
+    depMap.forEach((idx, name) => { depsArray[idx] = name })
+    const dependencies = depsArray.filter(Boolean)
 
     const fulfillState = buildActionState(
       rule.action,
       rule.actionValue,
-      conditionExpr
+      conditionExpr,
+      field
     )
     result.push({
       dependencies,
@@ -227,26 +246,42 @@ function buildV2Reactions(field: any): any[] {
   return result
 }
 
+function processSchemaReactions(schema: any): void {
+  if (!schema) return
+
+  if (schema.properties) {
+    Object.keys(schema.properties).forEach(fieldName => {
+      const field = schema.properties[fieldName]
+
+      const v2Rules = field?.['x-reactions-v2'] || []
+      if (v2Rules.length > 0) {
+        field['x-reactions'] = buildV2Reactions(field)
+      } else {
+        const v1Configs = field?.['x-reactions-config'] || []
+        if (v1Configs.length > 0) {
+          field['x-reactions'] = buildV1Reactions(field)
+        }
+      }
+
+      if (field.properties) {
+        processSchemaReactions(field)
+      }
+
+      if (field.items) {
+        processSchemaReactions(field.items)
+      }
+    })
+  }
+
+  if (schema.items) {
+    processSchemaReactions(schema.items)
+  }
+}
+
 function buildReactions(schema: FormilySchema): FormilySchema {
-  if (!schema?.properties) return schema
-
+  if (!schema) return schema
   const newSchema = JSON.parse(JSON.stringify(schema))
-
-  Object.keys(newSchema.properties).forEach(fieldName => {
-    const field = newSchema.properties[fieldName]
-
-    const v2Rules = field?.['x-reactions-v2'] || []
-    if (v2Rules.length > 0) {
-      field['x-reactions'] = buildV2Reactions(field)
-      return
-    }
-
-    const v1Configs = field?.['x-reactions-config'] || []
-    if (v1Configs.length > 0) {
-      field['x-reactions'] = buildV1Reactions(field)
-    }
-  })
-
+  processSchemaReactions(newSchema)
   return newSchema
 }
 

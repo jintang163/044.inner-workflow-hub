@@ -147,6 +147,13 @@ export const formApi = {
     request<void>({ url: `/form/definition/${id}/publish`, method: 'post' }),
   designGet: (id: number) => request<any>({ url: `/form/design/${id}`, method: 'get' }),
   designSave: (data: any) => request<any>({ url: '/form/design', method: 'post', data }),
+  schemaGet: (definitionId: number, version?: number) =>
+    request<FormilySchema>({
+      url: version !== undefined
+        ? `/form/definition/${definitionId}/schema/${version}`
+        : `/form/definition/${definitionId}/schema`,
+      method: 'get'
+    }),
   draftList: (params?: any) => request<PageResult<DraftVO>>({ url: '/form/draft/list', method: 'get', params }),
   draftSave: (data: any) => request<DraftVO>({ url: '/form/draft/save', method: 'post', data }),
   draftGet: (id: number) => request<DraftVO>({ url: `/form/draft/${id}`, method: 'get' }),

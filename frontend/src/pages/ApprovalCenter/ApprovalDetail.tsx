@@ -34,13 +34,43 @@ import ApprovalTimeline from './components/ApprovalTimeline'
 import FlowDiagram from './components/FlowDiagram'
 import ApprovalActionBar from './components/ApprovalActionBar'
 import AiRecommendationCard from '@/components/business/AiRecommendationCard'
-import { approvalApi, aiApi } from '@/api'
+import { approvalApi, formApi, aiApi } from '@/api'
 import type { ProcessInstanceVO, ApprovalHistoryVO, ApprovalTaskVO } from '@/types/approval'
+import type { FormilySchema } from '@/types/form'
 import type { AiRecommendationVO } from '@/types/ai'
+import FormRenderer from '@/components/FormRenderer'
 import dayjs from 'dayjs'
 
 const { Text, Title, Paragraph } = Typography
 const { TextArea } = Input
+
+const buildDefaultViewSchema = (formData: Record<string, any>): FormilySchema => {
+  const props: Record<string, any> = {}
+  const fieldLabels: Record<string, string> = {
+    title: '申请标题',
+    leaveType: '请假类型',
+    startDate: '开始日期',
+    endDate: '结束日期',
+    leaveDays: '请假天数',
+    contact: '联系电话',
+    reason: '申请理由',
+    handover: '工作交接',
+    amount: '金额',
+    totalAmount: '总金额',
+    city: '城市',
+    remark: '备注'
+  }
+  Object.keys(formData).forEach(key => {
+    props[key] = {
+      type: typeof formData[key] === 'number' ? 'number' : 'string',
+      title: fieldLabels[key] || key,
+      default: formData[key],
+      'x-decorator': 'FormItem',
+      'x-component': 'Input'
+    }
+  })
+  return { type: 'object', properties: props }
+}
 const { TabPane } = Tabs
 const { confirm } = Modal
 
@@ -64,6 +94,8 @@ const ApprovalDetail: React.FC = () => {
   const [withdrawForm] = Form.useForm()
   const [withdrawOpen, setWithdrawOpen] = useState(false)
   const [aiRecommendation, setAiRecommendation] = useState<AiRecommendationVO | null>(null)
+  const [formSchema, setFormSchema] = useState<FormilySchema | null>(null)
+  const [schemaLoading, setSchemaLoading] = useState(false)
 
   const instanceNo = id || ''
 
@@ -106,6 +138,30 @@ const ApprovalDetail: React.FC = () => {
             }
           }
         }
+      }
+
+      if (instRes && instRes.formId) {
+        setSchemaLoading(true)
+        try {
+          const schema = await formApi.schemaGet(instRes.formId, instRes.formVersion)
+          if (schema && schema.properties) {
+            setFormSchema(schema)
+          } else if (instRes.formSchema && instRes.formSchema.properties) {
+            setFormSchema(instRes.formSchema)
+          } else {
+            setFormSchema(buildDefaultViewSchema(instRes.formData || {}))
+          }
+        } catch (_) {
+          if (instRes.formSchema && instRes.formSchema.properties) {
+            setFormSchema(instRes.formSchema)
+          } else {
+            setFormSchema(buildDefaultViewSchema(instRes.formData || {}))
+          }
+        } finally {
+          setSchemaLoading(false)
+        }
+      } else if (instRes) {
+        setFormSchema(buildDefaultViewSchema(instRes.formData || {}))
       }
     } catch (err: any) {
       message.error(err?.message || '加载详情失败')
@@ -279,41 +335,53 @@ const ApprovalDetail: React.FC = () => {
         }
         style={{ borderRadius: 8 }}
       >
-        <Descriptions
-          bordered
-          column={{ xs: 1, sm: 2, md: 2 }}
-          size="middle"
-          labelStyle={{ width: 140, fontWeight: 500, background: '#fafafa' }}
-        >
-          <Descriptions.Item label="申请标题">
-            <Text strong style={{ fontSize: 15 }}>{formData.title}</Text>
-          </Descriptions.Item>
-          <Descriptions.Item label="请假类型">
-            <Tag color="blue">{formData.leaveType}</Tag>
-          </Descriptions.Item>
-          <Descriptions.Item label="开始日期">
-            <Text>{formData.startDate}</Text>
-          </Descriptions.Item>
-          <Descriptions.Item label="结束日期">
-            <Text>{formData.endDate}</Text>
-          </Descriptions.Item>
-          <Descriptions.Item label="请假天数">
-            <Text strong style={{ color: '#1890ff', fontSize: 16 }}>{formData.leaveDays} 天</Text>
-          </Descriptions.Item>
-          <Descriptions.Item label="联系电话">
-            <Text>{formData.contact || '-'}</Text>
-          </Descriptions.Item>
-          <Descriptions.Item label="申请理由" span={2}>
-            <Paragraph style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
-              {formData.reason || '-'}
-            </Paragraph>
-          </Descriptions.Item>
-          <Descriptions.Item label="工作交接" span={2}>
-            <Paragraph style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
-              {formData.handover || '-'}
-            </Paragraph>
-          </Descriptions.Item>
-        </Descriptions>
+        <Spin spinning={schemaLoading} tip="加载表单中...">
+          {formSchema ? (
+            <div style={{ border: '1px solid #f5f5f5', padding: 16, borderRadius: 6, background: '#fafafa' }}>
+              <FormRenderer
+                schema={formSchema}
+                formData={formData || {}}
+                mode="view"
+              />
+            </div>
+          ) : (
+            <Descriptions
+              bordered
+              column={{ xs: 1, sm: 2, md: 2 }}
+              size="middle"
+              labelStyle={{ width: 140, fontWeight: 500, background: '#fafafa' }}
+            >
+              <Descriptions.Item label="申请标题">
+                <Text strong style={{ fontSize: 15 }}>{formData.title}</Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="请假类型">
+                <Tag color="blue">{formData.leaveType}</Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="开始日期">
+                <Text>{formData.startDate}</Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="结束日期">
+                <Text>{formData.endDate}</Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="请假天数">
+                <Text strong style={{ color: '#1890ff', fontSize: 16 }}>{formData.leaveDays} 天</Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="联系电话">
+                <Text>{formData.contact || '-'}</Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="申请理由" span={2}>
+                <Paragraph style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+                  {formData.reason || '-'}
+                </Paragraph>
+              </Descriptions.Item>
+              <Descriptions.Item label="工作交接" span={2}>
+                <Paragraph style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+                  {formData.handover || '-'}
+                </Paragraph>
+              </Descriptions.Item>
+            </Descriptions>
+          )}
+        </Spin>
       </Card>
     )
   }

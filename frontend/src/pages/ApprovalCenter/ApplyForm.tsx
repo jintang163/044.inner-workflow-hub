@@ -8,7 +8,6 @@ import {
   Tree,
   Input,
   Upload,
-  Form,
   Select,
   message,
   Empty,
@@ -21,7 +20,8 @@ import {
   Divider,
   Modal,
   Row,
-  Col
+  Col,
+  Spin
 } from 'antd'
 import {
   ArrowLeftOutlined,
@@ -41,11 +41,69 @@ import type { UploadFile, UploadProps } from 'antd/es/upload/interface'
 import type { DataNode } from 'antd/es/tree'
 import { approvalApi, formApi } from '@/api'
 import type { StartableProcessVO, ProcessCategoryVO, DraftVO } from '@/types/approval'
+import type { FormilySchema } from '@/types/form'
+import FormRenderer, { type FormRendererRef } from '@/components/FormRenderer'
 import dayjs from 'dayjs'
 
 const { Step } = Steps
 const { Text, Paragraph } = Typography
 const { TextArea } = Input
+
+const buildFallbackSchema = (): FormilySchema => ({
+  type: 'object',
+  properties: {
+    title: {
+      type: 'string',
+      title: '申请标题',
+      required: true,
+      default: '',
+      'x-decorator': 'FormItem',
+      'x-component': 'Input',
+      'x-component-props': { placeholder: '请输入申请标题', maxLength: 200, showCount: true }
+    },
+    reason: {
+      type: 'string',
+      title: '申请事由',
+      required: true,
+      default: '',
+      'x-decorator': 'FormItem',
+      'x-component': 'TextArea',
+      'x-component-props': { placeholder: '请详细说明申请理由', rows: 4, maxLength: 1000, showCount: true }
+    },
+    amount: {
+      type: 'number',
+      title: '金额（元）',
+      default: undefined,
+      'x-decorator': 'FormItem',
+      'x-component': 'NumberPicker',
+      'x-component-props': { placeholder: '请输入金额', min: 0, precision: 2, style: { width: '100%' } }
+    },
+    startDate: {
+      type: 'string',
+      title: '开始日期',
+      default: '',
+      'x-decorator': 'FormItem',
+      'x-component': 'DatePicker',
+      'x-component-props': { style: { width: '100%' } }
+    },
+    endDate: {
+      type: 'string',
+      title: '结束日期',
+      default: '',
+      'x-decorator': 'FormItem',
+      'x-component': 'DatePicker',
+      'x-component-props': { style: { width: '100%' } }
+    },
+    remark: {
+      type: 'string',
+      title: '备注',
+      default: '',
+      'x-decorator': 'FormItem',
+      'x-component': 'TextArea',
+      'x-component-props': { placeholder: '其他需要说明的事项', rows: 3, maxLength: 500 }
+    }
+  }
+})
 
 const mockCategoryTree: ProcessCategoryVO[] = [
   {
@@ -169,15 +227,6 @@ const mockDrafts: DraftVO[] = [
   }
 ]
 
-const mockFormFields = [
-  { name: 'title', label: '标题', type: 'input', required: true, placeholder: '请输入申请标题' },
-  { name: 'reason', label: '申请事由', type: 'textarea', required: true, placeholder: '请详细说明申请理由' },
-  { name: 'amount', label: '金额（元）', type: 'number', required: false, placeholder: '请输入金额' },
-  { name: 'startDate', label: '开始日期', type: 'date', required: false },
-  { name: 'endDate', label: '结束日期', type: 'date', required: false },
-  { name: 'remark', label: '备注', type: 'textarea', required: false, placeholder: '其他需要说明的事项' }
-]
-
 const categoryToTreeData = (categories: ProcessCategoryVO[]): DataNode[] => {
   return categories.map(cat => ({
     key: String(cat.id),
@@ -201,6 +250,7 @@ const ApplyForm: React.FC = () => {
   const navigate = useNavigate()
   const [currentStep, setCurrentStep] = useState(0)
   const [loading, setLoading] = useState(false)
+  const [schemaLoading, setSchemaLoading] = useState(false)
   const [submitLoading, setSubmitLoading] = useState(false)
 
   const [categoryTree] = useState<DataNode[]>(categoryToTreeData(mockCategoryTree))
@@ -208,7 +258,9 @@ const ApplyForm: React.FC = () => {
   const [processList, setProcessList] = useState<StartableProcessVO[]>(mockProcesses)
   const [selectedProcess, setSelectedProcess] = useState<StartableProcessVO | null>(null)
 
-  const [form] = Form.useForm()
+  const [formSchema, setFormSchema] = useState<FormilySchema | null>(null)
+  const formRendererRef = useRef<FormRendererRef>(null)
+
   const [formValues, setFormValues] = useState<Record<string, any>>({})
   const [fileList, setFileList] = useState<UploadFile[]>([])
   const [ccUserIds, setCcUserIds] = useState<number[]>([])
@@ -221,10 +273,29 @@ const ApplyForm: React.FC = () => {
   const autoSaveTimer = useRef<number | null>(null)
   const debounceTimer = useRef<number | null>(null)
 
+  const loadSchema = useCallback(async (formId: number, version?: number) => {
+    setSchemaLoading(true)
+    try {
+      let schema: FormilySchema | null = null
+      try {
+        schema = await formApi.schemaGet(formId, version)
+      } catch (_) {
+        schema = null
+      }
+      if (!schema || !schema.properties) {
+        schema = buildFallbackSchema()
+      }
+      setFormSchema(schema)
+    } catch (_) {
+      setFormSchema(buildFallbackSchema())
+    } finally {
+      setSchemaLoading(false)
+    }
+  }, [])
+
   const loadProcesses = useCallback(async () => {
     setLoading(true)
     try {
-      // const res = await approvalApi.startableList()
       let list = mockProcesses
       if (selectedCategory.length > 0) {
         const catId = Number(selectedCategory[selectedCategory.length - 1])
@@ -284,13 +355,14 @@ const ApplyForm: React.FC = () => {
     }
   }, [])
 
-  const handleProcessSelect = (process: StartableProcessVO) => {
+  const handleProcessSelect = async (process: StartableProcessVO) => {
     setSelectedProcess(process)
     setFormValues({})
-    form.resetFields()
+    setFormSchema(null)
     setFileList([])
     setCcUserIds([])
     setDraftId(null)
+    await loadSchema(process.formId, process.formVersion)
   }
 
   const handleNextToForm = () => {
@@ -299,8 +371,13 @@ const ApplyForm: React.FC = () => {
       return
     }
     setCurrentStep(1)
-    form.setFieldsValue({ title: selectedProcess.processName + '-' + dayjs().format('YYYY-MM-DD') })
-    setFormValues(prev => ({ ...prev, title: selectedProcess.processName + '-' + dayjs().format('YYYY-MM-DD') }))
+    setTimeout(() => {
+      if (formRendererRef.current && formSchema) {
+        const defaultTitle = selectedProcess.processName + '-' + dayjs().format('YYYY-MM-DD')
+        formRendererRef.current.setFieldValue('title', defaultTitle)
+        setFormValues(prev => ({ ...prev, title: defaultTitle }))
+      }
+    }, 50)
   }
 
   const handleBackToProcess = () => {
@@ -308,9 +385,13 @@ const ApplyForm: React.FC = () => {
   }
 
   const handleNextToConfirm = async () => {
+    if (!formRendererRef.current) return
     try {
-      const values = await form.validateFields()
-      setFormValues(values)
+      const values = await formRendererRef.current.validate()
+      if (values && !values.title && selectedProcess) {
+        values.title = selectedProcess.processName + '-' + dayjs().format('YYYY-MM-DD')
+      }
+      setFormValues(values || {})
       triggerDebouncedSave()
       setCurrentStep(2)
     } catch (_) {}
@@ -320,16 +401,16 @@ const ApplyForm: React.FC = () => {
     setCurrentStep(1)
   }
 
-  const handleFormValuesChange = (_: any, values: Record<string, any>) => {
+  const handleFormValuesChange = (values: Record<string, any>) => {
     setFormValues(values)
     triggerDebouncedSave()
   }
 
   const handleSubmit = async () => {
-    if (!selectedProcess) return
+    if (!selectedProcess || !formRendererRef.current) return
     try {
       setSubmitLoading(true)
-      const values = await form.validateFields()
+      const values = await formRendererRef.current.submit()
       const submitData = {
         processKey: selectedProcess.processKey,
         title: values.title || selectedProcess.processName,
@@ -361,12 +442,18 @@ const ApplyForm: React.FC = () => {
     }
   }
 
-  const handleContinueDraft = (draft: DraftVO) => {
+  const handleContinueDraft = async (draft: DraftVO) => {
     const process = mockProcesses.find(p => p.processKey === draft.processKey)
     if (process) {
-      handleProcessSelect(process)
-      form.setFieldsValue(draft.formData)
-      setFormValues(draft.formData)
+      await handleProcessSelect(process)
+      setTimeout(() => {
+        if (formRendererRef.current) {
+          Object.entries(draft.formData || {}).forEach(([k, v]) => {
+            formRendererRef.current?.setFieldValue(k, v)
+          })
+        }
+        setFormValues({ ...draft.formData })
+      }, 80)
       setDraftId(draft.id)
       setCurrentStep(1)
       setShowDrafts(false)
@@ -394,36 +481,6 @@ const ApplyForm: React.FC = () => {
   const beforeUpload: UploadProps['beforeUpload'] = (file) => {
     setFileList(prev => [...prev, file as UploadFile])
     return false
-  }
-
-  const renderField = (field: any) => {
-    const rules = field.required ? [{ required: true, message: `请输入${field.label}` }] : []
-    switch (field.type) {
-      case 'textarea':
-        return (
-          <Form.Item key={field.name} name={field.name} label={field.label} rules={rules}>
-            <TextArea rows={3} placeholder={field.placeholder} showCount maxLength={500} />
-          </Form.Item>
-        )
-      case 'number':
-        return (
-          <Form.Item key={field.name} name={field.name} label={field.label} rules={rules}>
-            <Input type="number" placeholder={field.placeholder} style={{ width: '100%' }} />
-          </Form.Item>
-        )
-      case 'date':
-        return (
-          <Form.Item key={field.name} name={field.name} label={field.label} rules={rules}>
-            <Input type="date" style={{ width: '100%' }} />
-          </Form.Item>
-        )
-      default:
-        return (
-          <Form.Item key={field.name} name={field.name} label={field.label} rules={rules}>
-            <Input placeholder={field.placeholder} />
-          </Form.Item>
-        )
-    }
   }
 
   const steps = [
@@ -651,24 +708,33 @@ const ApplyForm: React.FC = () => {
                 title="填写申请信息"
                 style={{ borderRadius: 8 }}
               >
-                <Form
-                  form={form}
-                  layout="vertical"
-                  onValuesChange={handleFormValuesChange}
-                  initialValues={formValues}
-                >
-                  {mockFormFields.map(field => renderField(field))}
-                  <Form.Item label="附件上传">
-                    <Upload
-                      fileList={fileList}
-                      beforeUpload={beforeUpload}
-                      onRemove={(file) => setFileList(prev => prev.filter(f => f.uid !== file.uid))}
-                      multiple
-                    >
-                      <Button icon={<PlusOutlined />}>点击上传附件</Button>
-                    </Upload>
-                  </Form.Item>
-                </Form>
+                <Spin spinning={schemaLoading} tip="加载表单中...">
+                  {formSchema ? (
+                    <>
+                      <FormRenderer
+                        ref={formRendererRef}
+                        schema={formSchema}
+                        formData={formValues}
+                        mode="edit"
+                        onChange={handleFormValuesChange}
+                        onSubmit={(values) => setFormValues(values)}
+                      />
+                      <div style={{ marginTop: 16 }}>
+                        <Divider plain style={{ fontSize: 12, margin: '8px 0 12px' }}>附件上传（可选）</Divider>
+                        <Upload
+                          fileList={fileList}
+                          beforeUpload={beforeUpload}
+                          onRemove={(file) => setFileList(prev => prev.filter(f => f.uid !== file.uid))}
+                          multiple
+                        >
+                          <Button icon={<PlusOutlined />}>点击上传附件</Button>
+                        </Upload>
+                      </div>
+                    </>
+                  ) : (
+                    <Empty description="未加载到表单定义" />
+                  )}
+                </Spin>
               </Card>
             </Col>
 
@@ -753,13 +819,16 @@ const ApplyForm: React.FC = () => {
                 title="申请信息预览"
                 style={{ borderRadius: 8, marginBottom: 16 }}
               >
-                <Descriptions column={1} bordered size="middle">
-                  {mockFormFields.map(field => (
-                    <Descriptions.Item key={field.name} label={field.label}>
-                      {formValues[field.name] || <Text type="secondary">未填写</Text>}
-                    </Descriptions.Item>
-                  ))}
-                  <Descriptions.Item label="附件">
+                {formSchema ? (
+                  <>
+                    <div style={{ border: '1px solid #f5f5f5', padding: 16, borderRadius: 6, background: '#fafafa' }}>
+                      <FormRenderer
+                        schema={formSchema}
+                        formData={formValues}
+                        mode="view"
+                      />
+                    </div>
+                    <Divider plain style={{ fontSize: 12, margin: '16px 0 12px' }}>附件</Divider>
                     {fileList.length > 0 ? (
                       <Space direction="vertical">
                         {fileList.map(f => (
@@ -769,8 +838,14 @@ const ApplyForm: React.FC = () => {
                     ) : (
                       <Text type="secondary">无附件</Text>
                     )}
-                  </Descriptions.Item>
-                </Descriptions>
+                  </>
+                ) : (
+                  <Descriptions column={1} bordered size="middle">
+                    <Descriptions.Item label="申请标题">
+                      {formValues.title || <Text type="secondary">未填写</Text>}
+                    </Descriptions.Item>
+                  </Descriptions>
+                )}
               </Card>
 
               <Card
