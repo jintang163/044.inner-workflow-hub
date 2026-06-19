@@ -28,7 +28,12 @@ import {
   TransferDTO,
   AddSignDTO,
   DelegateDTO,
-  StartProcessDTO
+  StartProcessDTO,
+  DelegationVO,
+  DelegationSaveDTO,
+  DelegationQueryDTO,
+  BatchTransferDTO,
+  TransferRecordVO
 } from '@/types/approval'
 import {
   TenantVO,
@@ -176,8 +181,22 @@ export const approvalApi = {
     request<void>({ url: '/api/approval/batch-approve', method: 'post', data }),
   batchReject: (data: { taskIds: string[]; comment?: string }) =>
     request<void>({ url: '/api/approval/batch-reject', method: 'post', data }),
+  batchTransfer: (data: BatchTransferDTO) =>
+    request<void>({ url: '/api/approval/batch-transfer', method: 'post', data }),
   markCcRead: (taskId: number) =>
-    request<void>({ url: '/api/notify/log/read', method: 'post', data: { taskId } })
+    request<void>({ url: '/api/notify/log/read', method: 'post', data: { taskId } }),
+  delegationPage: (params?: DelegationQueryDTO) =>
+    request<PageResult<DelegationVO>>({ url: '/api/approval/delegation/page', method: 'get', params }),
+  delegationGet: (id: number) =>
+    request<DelegationVO>({ url: `/api/approval/delegation/${id}`, method: 'get' }),
+  delegationSave: (data: DelegationSaveDTO) =>
+    request<void>({ url: '/api/approval/delegation', method: 'post', data }),
+  delegationUpdate: (data: DelegationSaveDTO) =>
+    request<void>({ url: '/api/approval/delegation', method: 'put', data }),
+  delegationRevoke: (id: number) =>
+    request<void>({ url: `/api/approval/delegation/${id}/revoke`, method: 'put' }),
+  hasActiveDelegation: () =>
+    request<boolean>({ url: '/api/approval/delegation/active/current', method: 'get' })
 }
 
 export const notifyApi = {

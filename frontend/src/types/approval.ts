@@ -175,3 +175,71 @@ export interface StartProcessDTO {
   attachmentIds?: number[]
   draftId?: number
 }
+
+export type DelegationStatus = 0 | 1 | 2 | 3
+
+export interface DelegationVO {
+  id: number
+  delegatorId: number
+  delegatorName: string
+  delegateeId: number
+  delegateeName: string
+  startTime: string
+  endTime: string
+  delegationReason?: string
+  delegationStatus: DelegationStatus
+  delegationStatusName: string
+  processKeyList: string[]
+  remark?: string
+  createTime: string
+}
+
+export interface DelegationSaveDTO {
+  id?: number
+  delegateeId: number
+  delegateeName: string
+  startTime: string
+  endTime: string
+  delegationReason?: string
+  processKeys?: string[]
+  remark?: string
+}
+
+export interface DelegationQueryDTO {
+  pageNum?: number
+  pageSize?: number
+  delegationStatus?: DelegationStatus
+  delegatorName?: string
+  delegateeName?: string
+  queryType?: number
+}
+
+export interface BatchTransferDTO {
+  taskIds?: string[]
+  transferAll?: boolean
+  targetUserId: number
+  targetUserName: string
+  actionRemark?: string
+}
+
+export type TransferType = 1 | 2 | 3
+
+export interface TransferRecordVO {
+  id: number
+  instanceId: number
+  instanceNo: string
+  taskId?: number
+  flowableTaskId?: string
+  nodeId?: string
+  nodeName?: string
+  transferType: TransferType
+  transferTypeName: string
+  sourceUserId: number
+  sourceUserName: string
+  targetUserId: number
+  targetUserName: string
+  transferReason?: string
+  delegationId?: number
+  title?: string
+  createTime: string
+}

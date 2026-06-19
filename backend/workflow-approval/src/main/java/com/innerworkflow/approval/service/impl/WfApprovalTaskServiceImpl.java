@@ -112,6 +112,16 @@ public class WfApprovalTaskServiceImpl extends ServiceImpl<WfApprovalTaskMapper,
     }
 
     @Override
+    public List<WfApprovalTask> listTodoByUserId(Long userId) {
+        LambdaQueryWrapper<WfApprovalTask> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(WfApprovalTask::getAssigneeId, userId);
+        wrapper.eq(WfApprovalTask::getTaskStatus, TaskStatusEnum.PENDING.getCode());
+        wrapper.eq(WfApprovalTask::getNodeType, 1);
+        wrapper.orderByDesc(WfApprovalTask::getCreateTime);
+        return this.list(wrapper);
+    }
+
+    @Override
     public WfApprovalTask getByInstanceIdAndNodeId(Long instanceId, String nodeId) {
         LambdaQueryWrapper<WfApprovalTask> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(WfApprovalTask::getInstanceId, instanceId);

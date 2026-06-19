@@ -23,6 +23,8 @@ public interface WfApprovalService {
 
     void batchApprove(WfBatchApprovalDTO dto);
 
+    void batchTransfer(WfBatchTransferDTO dto);
+
     WfProcessDetailVO getProcessDetail(Long instanceId);
 
     String getProcessDiagram(Long instanceId);

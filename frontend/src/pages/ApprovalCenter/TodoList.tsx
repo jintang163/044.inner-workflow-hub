@@ -1,16 +1,24 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Card, Table, Space, Button, message, Modal } from 'antd'
-import { ReloadOutlined, PlusOutlined, CheckCircleOutlined, ExclamationCircleOutlined } from '@ant-design/icons'
+import { Card, Table, Space, Button, message, Modal, Form, Input } from 'antd'
+import {
+  ReloadOutlined,
+  PlusOutlined,
+  CheckCircleOutlined,
+  ExclamationCircleOutlined,
+  SwapOutlined
+} from '@ant-design/icons'
 import type { TableRowSelection } from 'antd/es/table/interface'
 import TaskFilterBar, { FilterValues } from './components/TaskFilterBar'
 import { getTodoColumns } from './components/TaskTableColumns'
 import BatchApprovalDrawer from './components/BatchApprovalDrawer'
 import { approvalApi, aiApi } from '@/api'
-import type { ApprovalTaskVO } from '@/types/approval'
+import type { ApprovalTaskVO, BatchTransferDTO } from '@/types/approval'
 import type { PageResult } from '@/types'
+import UserSelect from '@/components/business/UserSelect'
 
 const { confirm } = Modal
+const { TextArea } = Input
 
 const TodoList: React.FC = () => {
   const navigate = useNavigate()
@@ -22,6 +30,8 @@ const TodoList: React.FC = () => {
   const [actionLoading, setActionLoading] = useState(false)
   const [filterValues, setFilterValues] = useState<FilterValues>({})
   const [keyword, setKeyword] = useState<string | undefined>(undefined)
+  const [transferModalVisible, setTransferModalVisible] = useState(false)
+  const [transferForm] = Form.useForm()
 
   const fetchData = useCallback(async (pageNum = 1, pageSize = 10, filters?: FilterValues) => {
     setLoading(true)
@@ -160,6 +170,36 @@ const TodoList: React.FC = () => {
     }
   }
 
+  const handleTransferAll = () => {
+    transferForm.resetFields()
+    setTransferModalVisible(true)
+  }
+
+  const handleBatchTransfer = async () => {
+    try {
+      const values = await transferForm.validateFields()
+      setActionLoading(true)
+
+      const transferData: BatchTransferDTO = {
+        taskIds: selectedRows.map(r => r.flowableTaskId),
+        targetUserId: values.targetUserId,
+        targetUserName: '',
+        actionRemark: values.actionRemark
+      }
+
+      await approvalApi.batchTransfer(transferData)
+      message.success(`批量转审 ${selectedRows.length} 条任务成功`)
+      setTransferModalVisible(false)
+      setSelectedRowKeys([])
+      setSelectedRows([])
+      fetchData(data.pageNum, data.pageSize, filterValues)
+    } catch (err: any) {
+      message.error(err?.message || '操作失败')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
   const columns = getTodoColumns({
     keyword,
     onViewDetail: handleViewDetail,
@@ -194,6 +234,14 @@ const TodoList: React.FC = () => {
               onClick={() => setDrawerOpen(true)}
             >
               批量审批（{selectedRowKeys.length}）
+            </Button>
+            <Button
+              type={selectedRowKeys.length > 0 ? 'default' : 'default'}
+              disabled={selectedRowKeys.length === 0}
+              icon={<SwapOutlined />}
+              onClick={handleTransferAll}
+            >
+              批量转审
             </Button>
             <Button
               icon={<ReloadOutlined />}
@@ -232,6 +280,31 @@ const TodoList: React.FC = () => {
         onBatchReject={handleBatchReject}
         loading={actionLoading}
       />
+
+      <Modal
+        title={`批量转审（${selectedRows.length} 条任务）`}
+        open={transferModalVisible}
+        onOk={handleBatchTransfer}
+        onCancel={() => setTransferModalVisible(false)}
+        confirmLoading={actionLoading}
+        okText="确认转审"
+        cancelText="取消"
+        width={480}
+      >
+        <Form form={transferForm} layout="vertical">
+          <Form.Item
+            name="targetUserId"
+            label="转审给"
+            rules={[{ required: true, message: '请选择转审对象' }]}
+          >
+            <UserSelect placeholder="请选择转审对象" multiple={false} />
+          </Form.Item>
+
+          <Form.Item name="actionRemark" label="转审原因">
+            <TextArea rows={3} placeholder="请输入转审原因（可选）" maxLength={200} />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   )
 }

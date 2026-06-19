@@ -30,5 +30,7 @@ public interface WfApprovalTaskService {
 
     long countTodoByUserId(Long userId);
 
+    List<WfApprovalTask> listTodoByUserId(Long userId);
+
     WfApprovalTask getByInstanceIdAndNodeId(Long instanceId, String nodeId);
 }

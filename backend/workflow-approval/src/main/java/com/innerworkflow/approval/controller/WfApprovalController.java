@@ -79,4 +79,11 @@ public class WfApprovalController {
         approvalService.batchApprove(dto);
         return R.success();
     }
+
+    @Operation(summary = "批量转审")
+    @PostMapping("/batch-transfer")
+    public R<Void> batchTransfer(@Valid @RequestBody WfBatchTransferDTO dto) {
+        approvalService.batchTransfer(dto);
+        return R.success();
+    }
 }
