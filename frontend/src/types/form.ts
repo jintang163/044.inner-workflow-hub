@@ -58,13 +58,66 @@ export interface ValidatorRule {
   customCode?: string
 }
 
+export type ConditionOperator =
+  | '=='
+  | '!='
+  | '>'
+  | '<'
+  | '>='
+  | '<='
+  | 'contains'
+  | 'notContains'
+  | 'startsWith'
+  | 'endsWith'
+  | 'empty'
+  | 'notEmpty'
+  | 'in'
+  | 'notIn'
+
+export type LogicalOperator = 'AND' | 'OR'
+
+export type ReactionAction =
+  | 'visible'
+  | 'required'
+  | 'readonly'
+  | 'disabled'
+  | 'setValue'
+  | 'setOptions'
+  | 'setComponentProps'
+
+export interface SimpleCondition {
+  type: 'simple'
+  id: string
+  dependencies: string[]
+  operator: ConditionOperator
+  value: any
+}
+
+export interface GroupCondition {
+  type: 'group'
+  id: string
+  logicalOperator: LogicalOperator
+  children: ConditionNode[]
+}
+
+export type ConditionNode = SimpleCondition | GroupCondition
+
+export interface ReactionRuleV2 {
+  id: string
+  name?: string
+  enabled?: boolean
+  condition: ConditionNode
+  action: ReactionAction
+  actionValue?: any
+}
+
 export interface ReactionRule {
   id: string
   dependencies: string[]
-  operator: '==' | '!=' | '>' | '<' | 'contains' | 'empty' | 'notEmpty'
+  operator: ConditionOperator
   value: any
   targetField?: string
-  action: 'visible' | 'required' | 'readonly' | 'disabled' | 'setValue' | 'setOptions'
+  action: ReactionAction
   actionValue?: any
 }
 

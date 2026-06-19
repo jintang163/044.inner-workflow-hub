@@ -210,6 +210,25 @@ const SchemaField = createSchemaField({
   components
 })
 
+function filterHiddenValues(form: ReturnType<typeof createForm>): Record<string, any> {
+  const values: Record<string, any> = {}
+  const allValues = form.values || {}
+
+  Object.keys(allValues).forEach(fieldName => {
+    try {
+      const field = form.query(fieldName).take() as any
+      if (!field || field.display === 'none' || field.hidden) {
+        return
+      }
+      values[fieldName] = allValues[fieldName]
+    } catch {
+      values[fieldName] = allValues[fieldName]
+    }
+  })
+
+  return values
+}
+
 function useFormRenderer() {
   const formRef = useRef<FormRendererRef | null>(null)
 
@@ -308,7 +327,7 @@ const FormRenderer = forwardRef<FormRendererRef, FormRendererProps>(function For
     return createForm({
       readPretty: mode === 'view',
       values: { ...formData },
-      effects() {}
+      validateFirst: false
     })
   }, [effectiveSchema])
 
@@ -319,20 +338,21 @@ const FormRenderer = forwardRef<FormRendererRef, FormRendererProps>(function For
   useImperativeHandle(ref, (): FormRendererRef => ({
     submit: async () => {
       try {
-        const values = await form.submit()
-        onSubmit?.(values)
-        return values
+        await form.validate()
+        const cleanValues = filterHiddenValues(form)
+        onSubmit?.(cleanValues)
+        return cleanValues
       } catch (errors) {
         throw errors
       }
     },
     getFormData: () => {
-      return form.values
+      return filterHiddenValues(form)
     },
     validate: async () => {
       try {
         await form.validate()
-        return form.values
+        return filterHiddenValues(form)
       } catch (errors) {
         throw errors
       }
@@ -355,24 +375,11 @@ const FormRenderer = forwardRef<FormRendererRef, FormRendererProps>(function For
       <FormConsumer>
         {() => {
           if (onChange) {
-            Promise.resolve().then(() => onChange(form.values))
+            Promise.resolve().then(() => onChange(filterHiddenValues(form)))
           }
           return (
             <div>
               <SchemaField schema={effectiveSchema} />
-              <RecursionField schema={effectiveSchema} name={undefined} />
-              {Object.entries(effectiveSchema.properties || {}).map(([name, fieldSchema]) => (
-                <FormilyField
-                  key={name}
-                  name={name}
-                  basePath={undefined}
-                >
-                  {(field) => {
-                    if (field.hidden || field.display === 'none') return null
-                    return <RecursionField schema={fieldSchema as any} name={name} />
-                  }}
-                </FormilyField>
-              ))}
             </div>
           )
         }}

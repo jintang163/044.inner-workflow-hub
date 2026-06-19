@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import {
   Input,
   InputNumber,
@@ -18,7 +18,10 @@ import {
   Tooltip,
   Popconfirm,
   DatePicker,
-  Radio
+  Radio,
+  Dropdown,
+  Empty,
+  Segmented
 } from 'antd'
 import {
   PlusOutlined,
@@ -28,12 +31,22 @@ import {
   QuestionCircleOutlined,
   EditOutlined,
   DownOutlined,
-  UpOutlined
+  UpOutlined,
+  ExperimentOutlined,
+  ThunderboltOutlined,
+  BranchesOutlined
 } from '@ant-design/icons'
 import type {
   FormilySchema,
   ValidatorRule,
   ReactionRule,
+  ReactionRuleV2,
+  ConditionNode,
+  SimpleCondition,
+  GroupCondition,
+  ConditionOperator,
+  LogicalOperator,
+  ReactionAction,
   SelectOption,
   SubFormColumnConfig,
   DisplayType
@@ -46,24 +59,61 @@ interface WidgetPropertiesPanelProps {
   onUpdateField: (fieldPath: string, updates: Record<string, any>) => void
 }
 
-const OPERATORS = [
-  { label: '等于 (==)', value: '==' },
-  { label: '不等于 (!=)', value: '!=' },
-  { label: '大于 (>)', value: '>' },
-  { label: '小于 (<)', value: '<' },
-  { label: '包含 (contains)', value: 'contains' },
-  { label: '为空 (empty)', value: 'empty' },
-  { label: '不为空 (notEmpty)', value: 'notEmpty' }
+const OPERATORS: Array<{ label: string; value: ConditionOperator; needValue?: boolean }> = [
+  { label: '等于 (==)', value: '==', needValue: true },
+  { label: '不等于 (!=)', value: '!=', needValue: true },
+  { label: '大于 (>)', value: '>', needValue: true },
+  { label: '小于 (<)', value: '<', needValue: true },
+  { label: '大于等于 (>=)', value: '>=', needValue: true },
+  { label: '小于等于 (<=)', value: '<=', needValue: true },
+  { label: '包含', value: 'contains', needValue: true },
+  { label: '不包含', value: 'notContains', needValue: true },
+  { label: '开头是', value: 'startsWith', needValue: true },
+  { label: '结尾是', value: 'endsWith', needValue: true },
+  { label: '为空', value: 'empty', needValue: false },
+  { label: '不为空', value: 'notEmpty', needValue: false },
+  { label: '在列表中', value: 'in', needValue: true },
+  { label: '不在列表中', value: 'notIn', needValue: true }
 ]
 
-const ACTIONS = [
+const ACTIONS: Array<{ label: string; value: ReactionAction }> = [
   { label: '显示/隐藏', value: 'visible' },
   { label: '必填/非必填', value: 'required' },
   { label: '只读/可编辑', value: 'readonly' },
   { label: '禁用/启用', value: 'disabled' },
-  { label: '设置默认值', value: 'setValue' },
-  { label: '修改选项', value: 'setOptions' }
+  { label: '设置默认值', value: 'setValue' }
 ]
+
+const generateId = () => `node_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+
+const createSimpleCondition = (fieldName?: string): SimpleCondition => ({
+  type: 'simple',
+  id: generateId(),
+  dependencies: fieldName ? [fieldName] : [],
+  operator: '==',
+  value: ''
+})
+
+const createGroupCondition = (logical: LogicalOperator = 'AND'): GroupCondition => ({
+  type: 'group',
+  id: generateId(),
+  logicalOperator: logical,
+  children: [createSimpleCondition()]
+})
+
+const createRuleV2 = (firstFieldName?: string): ReactionRuleV2 => ({
+  id: `rule_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+  name: `规则`,
+  enabled: true,
+  condition: {
+    type: 'group',
+    id: generateId(),
+    logicalOperator: 'AND',
+    children: [createSimpleCondition(firstFieldName)]
+  },
+  action: 'visible',
+  actionValue: true
+})
 
 function WidgetPropertiesPanel(props: WidgetPropertiesPanelProps) {
   const { schema, selectedField, onUpdateField } = props
@@ -74,6 +124,8 @@ function WidgetPropertiesPanel(props: WidgetPropertiesPanelProps) {
   const [editingOptionIndex, setEditingOptionIndex] = useState<number | null>(null)
   const [newOptionLabel, setNewOptionLabel] = useState('')
   const [newOptionValue, setNewOptionValue] = useState('')
+  const [reactionMode, setReactionMode] = useState<'v1' | 'v2'>('v2')
+  const [expandedConditionIds, setExpandedConditionIds] = useState<Set<string>>(new Set())
 
   const fieldSchema = useMemo(() => {
     if (!selectedField || !schema?.properties) return null
@@ -99,6 +151,10 @@ function WidgetPropertiesPanel(props: WidgetPropertiesPanelProps) {
 
   const reactions = useMemo((): ReactionRule[] => {
     return fieldSchema?.['x-reactions-config'] || []
+  }, [fieldSchema])
+
+  const v2Reactions = useMemo((): ReactionRuleV2[] => {
+    return fieldSchema?.['x-reactions-v2'] || []
   }, [fieldSchema])
 
   const allFieldNames = useMemo(() => {
@@ -199,6 +255,330 @@ function WidgetPropertiesPanel(props: WidgetPropertiesPanelProps) {
   const handleReactionRemove = (index: number) => {
     const newReactions = reactions.filter((_, i) => i !== index)
     updateValue('x-reactions-config', newReactions)
+  }
+
+  const handleRuleV2Add = () => {
+    const firstField = allFieldNames[0]
+    const newRule = createRuleV2(firstField)
+    updateValue('x-reactions-v2', [...v2Reactions, newRule])
+  }
+
+  const handleRuleV2Update = (index: number, updates: Partial<ReactionRuleV2>) => {
+    const newRules = [...v2Reactions]
+    newRules[index] = { ...newRules[index], ...updates }
+    updateValue('x-reactions-v2', newRules)
+  }
+
+  const handleRuleV2Remove = (index: number) => {
+    const newRules = v2Reactions.filter((_, i) => i !== index)
+    updateValue('x-reactions-v2', newRules)
+  }
+
+  const updateConditionNodeInTree = useCallback(
+    (root: ConditionNode, targetId: string, updater: (n: ConditionNode) => ConditionNode): ConditionNode => {
+      if (root.id === targetId) {
+        return updater(root)
+      }
+      if (root.type === 'group') {
+        return {
+          ...root,
+          children: root.children.map(c => updateConditionNodeInTree(c, targetId, updater))
+        }
+      }
+      return root
+    },
+    []
+  )
+
+  const deleteConditionNodeFromTree = useCallback(
+    (root: ConditionNode, targetId: string): ConditionNode | null => {
+      if (root.id === targetId) return null
+      if (root.type === 'group') {
+        const newChildren: ConditionNode[] = []
+        for (const child of root.children) {
+          const r = deleteConditionNodeFromTree(child, targetId)
+          if (r) newChildren.push(r)
+        }
+        return { ...root, children: newChildren }
+      }
+      return root
+    },
+    []
+  )
+
+  const addChildToGroup = useCallback(
+    (root: ConditionNode, groupId: string, newNode: ConditionNode): ConditionNode => {
+      if (root.id === groupId && root.type === 'group') {
+        return { ...root, children: [...root.children, newNode] }
+      }
+      if (root.type === 'group') {
+        return {
+          ...root,
+          children: root.children.map(c => addChildToGroup(c, groupId, newNode))
+        }
+      }
+      return root
+    },
+    []
+  )
+
+  const handleConditionNodeUpdate = (
+    ruleIndex: number,
+    nodeId: string,
+    updater: (n: ConditionNode) => ConditionNode
+  ) => {
+    const rule = v2Reactions[ruleIndex]
+    if (!rule) return
+    const newCondition = updateConditionNodeInTree(rule.condition, nodeId, updater)
+    handleRuleV2Update(ruleIndex, { condition: newCondition })
+  }
+
+  const handleConditionNodeDelete = (ruleIndex: number, nodeId: string) => {
+    const rule = v2Reactions[ruleIndex]
+    if (!rule) return
+    const newCondition = deleteConditionNodeFromTree(rule.condition, nodeId)
+    if (!newCondition) {
+      message.warning('至少需要保留一个条件组')
+      return
+    }
+    if (newCondition.type === 'group' && newCondition.children.length === 0) {
+      message.warning('条件组至少需要一个子条件')
+      return
+    }
+    handleRuleV2Update(ruleIndex, { condition: newCondition })
+  }
+
+  const handleAddSimpleChild = (ruleIndex: number, groupId: string) => {
+    const firstField = allFieldNames[0]
+    handleConditionNodeUpdate(ruleIndex, groupId, (node) => {
+      if (node.type !== 'group') return node
+      return {
+        ...node,
+        children: [...node.children, createSimpleCondition(firstField)]
+      }
+    })
+  }
+
+  const handleAddGroupChild = (ruleIndex: number, groupId: string) => {
+    handleConditionNodeUpdate(ruleIndex, groupId, (node) => {
+      if (node.type !== 'group') return node
+      return {
+        ...node,
+        children: [...node.children, createGroupCondition('AND')]
+      }
+    })
+  }
+
+  const toggleNodeExpand = (nodeId: string) => {
+    setExpandedConditionIds(prev => {
+      const next = new Set(prev)
+      if (next.has(nodeId)) next.delete(nodeId)
+      else next.add(nodeId)
+      return next
+    })
+  }
+
+  const convertSimpleToGroup = (ruleIndex: number, nodeId: string, logical: LogicalOperator) => {
+    handleConditionNodeUpdate(ruleIndex, nodeId, (node) => {
+      if (node.type !== 'simple') return node
+      return {
+        type: 'group',
+        id: generateId(),
+        logicalOperator: logical,
+        children: [node]
+      }
+    })
+  }
+
+  const renderConditionNode = (
+    ruleIndex: number,
+    node: ConditionNode,
+    depth: number,
+    _rule: ReactionRuleV2
+  ): React.ReactNode => {
+    const indent = depth * 12
+    const isExpanded = expandedConditionIds.size === 0 || expandedConditionIds.has(node.id)
+
+    if (node.type === 'simple') {
+      const opDef = OPERATORS.find(o => o.value === node.operator)
+      return (
+        <div
+          style={{
+            padding: 6,
+            marginLeft: indent,
+            border: '1px dashed #d9d9d9',
+            borderRadius: 4,
+            marginBottom: 6,
+            background: '#fafafa'
+          }}
+        >
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 6, flexWrap: 'wrap' }}>
+            <Tag color="green" style={{ margin: 0, fontSize: 11 }}>条件</Tag>
+            <Dropdown
+              menu={{
+                items: [
+                  { key: 'to-and', label: '升级为【且】组', onClick: () => convertSimpleToGroup(ruleIndex, node.id, 'AND') },
+                  { key: 'to-or', label: '升级为【或】组', onClick: () => convertSimpleToGroup(ruleIndex, node.id, 'OR') }
+                ]
+              }}
+              trigger={['click']}
+            >
+              <Button type="text" size="small" icon={<BranchesOutlined />} />
+            </Dropdown>
+            <div style={{ flex: 1 }} />
+            <Popconfirm title="删除此条件？" onConfirm={() => handleConditionNodeDelete(ruleIndex, node.id)}>
+              <Button type="text" size="small" danger icon={<DeleteOutlined />} />
+            </Popconfirm>
+          </div>
+
+          <Row gutter={4} style={{ rowGap: 4 }}>
+            <Col xs={24} sm={depth === 0 ? 10 : 24}>
+              <Select
+                size="small"
+                placeholder="依赖字段"
+                value={node.dependencies}
+                mode="multiple"
+                maxTagCount={2}
+                options={allFieldNames.map(name => ({ label: name, value: name }))}
+                onChange={(val) => handleConditionNodeUpdate(ruleIndex, node.id, (n) =>
+                  n.type === 'simple' ? { ...n, dependencies: val as string[] } : n
+                )}
+              />
+            </Col>
+            <Col xs={24} sm={depth === 0 ? 8 : 24}>
+              <Select
+                size="small"
+                value={node.operator}
+                options={OPERATORS.map(o => ({ label: o.label, value: o.value }))}
+                onChange={(val) => handleConditionNodeUpdate(ruleIndex, node.id, (n) =>
+                  n.type === 'simple' ? { ...n, operator: val as ConditionOperator } : n
+                )}
+              />
+            </Col>
+            {opDef?.needValue !== false && (
+              <Col xs={24} sm={depth === 0 ? 6 : 24}>
+                <Input
+                  size="small"
+                  placeholder="比较值"
+                  value={String(node.value ?? '')}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    const num = Number(v)
+                    const final = !isNaN(num) && v !== '' && v !== null ? num : v
+                    handleConditionNodeUpdate(ruleIndex, node.id, (n) =>
+                      n.type === 'simple' ? { ...n, value: final } : n
+                    )
+                  }}
+                />
+              </Col>
+            )}
+          </Row>
+        </div>
+      )
+    }
+
+    const group: GroupCondition = node
+    const childCount = group.children.length
+
+    return (
+      <div
+        style={{
+          marginLeft: indent,
+          marginBottom: 6,
+          border: `1px solid ${group.logicalOperator === 'AND' ? '#91caff' : '#ffd591'}`,
+          borderRadius: 6,
+          background: group.logicalOperator === 'AND' ? '#f0f7ff' : '#fffbe6',
+          overflow: 'hidden'
+        }}
+      >
+        <div
+          style={{
+            padding: '4px 6px',
+            background: group.logicalOperator === 'AND' ? '#e6f4ff' : '#fff7e6',
+            borderBottom: `1px solid ${group.logicalOperator === 'AND' ? '#bae0ff' : '#ffd591'}`,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6
+          }}
+        >
+          <Tag
+            color={group.logicalOperator === 'AND' ? 'blue' : 'orange'}
+            style={{ margin: 0, fontSize: 11, fontWeight: 600 }}
+          >
+            {group.logicalOperator === 'AND' ? 'ALL 且' : 'ANY 或'}
+          </Tag>
+          <Radio.Group
+            size="small"
+            optionType="button"
+            buttonStyle="solid"
+            value={group.logicalOperator}
+            onChange={(e) => handleConditionNodeUpdate(ruleIndex, node.id, (n) =>
+              n.type === 'group' ? { ...n, logicalOperator: e.target.value as LogicalOperator } : n
+            )}
+          >
+            <Radio.Button value="AND">且（AND）</Radio.Button>
+            <Radio.Button value="OR">或（OR）</Radio.Button>
+          </Radio.Group>
+
+          <span style={{ color: '#8c8c8c', fontSize: 11, marginLeft: 4 }}>
+            {childCount} 项
+          </span>
+
+          <div style={{ flex: 1 }} />
+
+          <Button
+            type="text"
+            size="small"
+            onClick={() => toggleNodeExpand(node.id)}
+            icon={isExpanded ? <UpOutlined /> : <DownOutlined />}
+          />
+          <Popconfirm title="删除整个条件组？" onConfirm={() => handleConditionNodeDelete(ruleIndex, node.id)}>
+            <Button type="text" size="small" danger icon={<DeleteOutlined />} />
+          </Popconfirm>
+        </div>
+
+        {isExpanded && (
+          <div style={{ padding: 6 }}>
+            {group.children.map(child => renderConditionNode(ruleIndex, child, depth + 1, _rule))}
+
+            <Space size={4} style={{ marginTop: 4 }} wrap>
+              <Button
+                type="dashed"
+                size="small"
+                icon={<PlusOutlined />}
+                onClick={() => handleAddSimpleChild(ruleIndex, group.id)}
+              >
+                + 条件
+              </Button>
+              <Button
+                type="dashed"
+                size="small"
+                icon={<BranchesOutlined />}
+                onClick={() => handleAddGroupChild(ruleIndex, group.id)}
+              >
+                + 子组
+              </Button>
+              {group.children.length === 1 && (
+                <Tooltip title="组只剩一个条件时可降级为简单条件">
+                  <Button
+                    type="text"
+                    size="small"
+                    disabled={group.children[0].type !== 'simple'}
+                    onClick={() => {
+                      const onlyChild = group.children[0]
+                      if (onlyChild.type !== 'simple') return
+                      handleConditionNodeUpdate(ruleIndex, node.id, () => onlyChild)
+                    }}
+                  >
+                    <ExperimentOutlined /> 降级
+                  </Button>
+                </Tooltip>
+              )}
+            </Space>
+          </div>
+        )}
+      </div>
+    )
   }
 
   const openOptionModal = () => {
@@ -1001,116 +1381,272 @@ function WidgetPropertiesPanel(props: WidgetPropertiesPanelProps) {
                       fontSize: 12,
                       color: '#597ef7',
                       display: 'flex',
-                      gap: 4
+                      gap: 4,
+                      flexDirection: 'column'
                     }}
                   >
-                    <QuestionCircleOutlined />
-                    <span>当依赖字段满足条件时，对当前字段执行联动动作</span>
+                    <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                      <QuestionCircleOutlined />
+                      <span>当依赖字段满足条件时，对当前字段执行联动动作</span>
+                    </div>
+                    <Segmented
+                      size="small"
+                      value={reactionMode}
+                      onChange={(v) => setReactionMode(v as 'v1' | 'v2')}
+                      options={[
+                        { label: (
+                          <Space size={4}>
+                            <ThunderboltOutlined />简单模式
+                          </Space>
+                        ), value: 'v1' },
+                        { label: (
+                          <Space size={4}>
+                            <BranchesOutlined />高级模式（AND/OR）
+                          </Space>
+                        ), value: 'v2' }
+                      ]}
+                      style={{ marginTop: 6, alignSelf: 'flex-start' }}
+                    />
                   </div>
-                  <List
-                    size="small"
-                    dataSource={reactions}
-                    locale={{ emptyText: '暂无联动规则' }}
-                    renderItem={(reaction, index) => (
-                      <List.Item
-                        key={reaction.id}
-                        style={{
-                          padding: '8px',
-                          border: '1px solid #f0f0f0',
-                          borderRadius: 4,
-                          marginBottom: 8,
-                          flexDirection: 'column',
-                          alignItems: 'stretch',
-                          gap: 8
-                        }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <Tag color="purple" style={{ margin: 0 }}>
-                            规则 {index + 1}
-                          </Tag>
-                          <Button
-                            type="text"
-                            size="small"
-                            danger
-                            icon={<MinusCircleOutlined />}
-                            onClick={() => handleReactionRemove(index)}
-                          />
-                        </div>
 
-                        <Select
-                          size="small"
-                          mode={reaction.operator === 'empty' || reaction.operator === 'notEmpty' ? undefined : 'multiple'}
-                          placeholder="选择依赖字段"
-                          value={reaction.dependencies}
-                          onChange={(val) => handleReactionUpdate(index, 'dependencies', val)}
-                          options={allFieldNames.map(name => ({
-                            label: name,
-                            value: name
-                          }))}
-                          style={{ maxTagCount: 3 }}
-                        />
-
-                        <Select
-                          size="small"
-                          value={reaction.operator}
-                          onChange={(val) => handleReactionUpdate(index, 'operator', val)}
-                          options={OPERATORS}
-                        />
-
-                        {reaction.operator !== 'empty' && reaction.operator !== 'notEmpty' && (
-                          <Input
-                            size="small"
-                            placeholder="触发值（支持字符串/数字）"
-                            value={String(reaction.value ?? '')}
-                            onChange={(e) => {
-                              const v = e.target.value
-                              const numVal = Number(v)
-                              const finalVal = !isNaN(numVal) && v !== '' && v !== null ? numVal : v
-                              handleReactionUpdate(index, 'value', finalVal)
+                  {reactionMode === 'v1' && (
+                    <>
+                      <List
+                        size="small"
+                        dataSource={reactions}
+                        locale={{ emptyText: '暂无联动规则' }}
+                        renderItem={(reaction, index) => (
+                          <List.Item
+                            key={reaction.id}
+                            style={{
+                              padding: '8px',
+                              border: '1px solid #f0f0f0',
+                              borderRadius: 4,
+                              marginBottom: 8,
+                              flexDirection: 'column',
+                              alignItems: 'stretch',
+                              gap: 8
                             }}
-                          />
-                        )}
-
-                        <Select
-                          size="small"
-                          value={reaction.action}
-                          onChange={(val) => handleReactionUpdate(index, 'action', val)}
-                          options={ACTIONS}
-                        />
-
-                        {(reaction.action === 'visible' || reaction.action === 'required' ||
-                          reaction.action === 'readonly' || reaction.action === 'disabled') && (
-                          <Radio.Group
-                            size="small"
-                            value={reaction.actionValue ?? true}
-                            onChange={(e) => handleReactionUpdate(index, 'actionValue', e.target.value)}
                           >
-                            <Radio value={true}>满足条件</Radio>
-                            <Radio value={false}>不满足条件</Radio>
-                          </Radio.Group>
-                        )}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <Tag color="purple" style={{ margin: 0 }}>
+                                规则 {index + 1}
+                              </Tag>
+                              <Button
+                                type="text"
+                                size="small"
+                                danger
+                                icon={<MinusCircleOutlined />}
+                                onClick={() => handleReactionRemove(index)}
+                              />
+                            </div>
 
-                        {reaction.action === 'setValue' && (
-                          <Input
-                            size="small"
-                            placeholder="设置的默认值"
-                            value={String(reaction.actionValue ?? '')}
-                            onChange={(e) => handleReactionUpdate(index, 'actionValue', e.target.value)}
-                          />
+                            <Select
+                              size="small"
+                              mode={reaction.operator === 'empty' || reaction.operator === 'notEmpty' ? undefined : 'multiple'}
+                              placeholder="选择依赖字段"
+                              value={reaction.dependencies}
+                              onChange={(val) => handleReactionUpdate(index, 'dependencies', val)}
+                              options={allFieldNames.map(name => ({
+                                label: name,
+                                value: name
+                              }))}
+                              style={{ maxTagCount: 3 }}
+                            />
+
+                            <Select
+                              size="small"
+                              value={reaction.operator}
+                              onChange={(val) => handleReactionUpdate(index, 'operator', val)}
+                              options={OPERATORS.map(o => ({ label: o.label, value: o.value }))}
+                            />
+
+                            {(() => {
+                              const op = OPERATORS.find(o => o.value === reaction.operator)
+                              return op?.needValue !== false && reaction.operator !== 'empty' && reaction.operator !== 'notEmpty' ? (
+                                <Input
+                                  size="small"
+                                  placeholder="触发值（支持字符串/数字）"
+                                  value={String(reaction.value ?? '')}
+                                  onChange={(e) => {
+                                    const v = e.target.value
+                                    const numVal = Number(v)
+                                    const finalVal = !isNaN(numVal) && v !== '' && v !== null ? numVal : v
+                                    handleReactionUpdate(index, 'value', finalVal)
+                                  }}
+                                />
+                              ) : null
+                            })()}
+
+                            <Select
+                              size="small"
+                              value={reaction.action}
+                              onChange={(val) => handleReactionUpdate(index, 'action', val)}
+                              options={ACTIONS.map(a => ({ label: a.label, value: a.value }))}
+                            />
+
+                            {(reaction.action === 'visible' || reaction.action === 'required' ||
+                              reaction.action === 'readonly' || reaction.action === 'disabled') && (
+                              <Radio.Group
+                                size="small"
+                                value={reaction.actionValue ?? true}
+                                onChange={(e) => handleReactionUpdate(index, 'actionValue', e.target.value)}
+                              >
+                                <Radio value={true}>满足条件</Radio>
+                                <Radio value={false}>不满足条件</Radio>
+                              </Radio.Group>
+                            )}
+
+                            {reaction.action === 'setValue' && (
+                              <Input
+                                size="small"
+                                placeholder="设置的默认值"
+                                value={String(reaction.actionValue ?? '')}
+                                onChange={(e) => handleReactionUpdate(index, 'actionValue', e.target.value)}
+                              />
+                            )}
+                          </List.Item>
                         )}
-                      </List.Item>
-                    )}
-                  />
-                  <Button
-                    type="dashed"
-                    size="small"
-                    icon={<PlusOutlined />}
-                    block
-                    style={{ marginTop: 8 }}
-                    onClick={handleReactionAdd}
-                  >
-                    添加联动规则
-                  </Button>
+                      />
+                      <Button
+                        type="dashed"
+                        size="small"
+                        icon={<PlusOutlined />}
+                        block
+                        style={{ marginTop: 8 }}
+                        onClick={handleReactionAdd}
+                      >
+                        添加简单规则
+                      </Button>
+                    </>
+                  )}
+
+                  {reactionMode === 'v2' && (
+                    <>
+                      {v2Reactions.length === 0 && (
+                        <Empty
+                          image={Empty.PRESENTED_IMAGE_SIMPLE}
+                          description="暂无高级联动规则"
+                          style={{ padding: '16px 0' }}
+                        />
+                      )}
+                      {v2Reactions.map((rule, ruleIdx) => (
+                        <div
+                          key={rule.id}
+                          style={{
+                            border: '1px solid #e8e8e8',
+                            borderRadius: 6,
+                            marginBottom: 10,
+                            overflow: 'hidden',
+                            background: '#fff'
+                          }}
+                        >
+                          <div
+                            style={{
+                              padding: '6px 8px',
+                              background: rule.enabled !== false ? '#f6ffed' : '#fafafa',
+                              borderBottom: '1px solid #f0f0f0',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 6
+                            }}
+                          >
+                            <Switch
+                              size="small"
+                              checked={rule.enabled !== false}
+                              onChange={(v) => handleRuleV2Update(ruleIdx, { enabled: v })}
+                            />
+                            <Input
+                              size="small"
+                              value={rule.name || ''}
+                              placeholder="规则名称"
+                              style={{ flex: 1, minWidth: 0 }}
+                              onChange={(e) => handleRuleV2Update(ruleIdx, { name: e.target.value })}
+                            />
+                            <Tag color={rule.action === 'visible' ? 'blue' : 'orange'} style={{ margin: 0 }}>
+                              {ACTIONS.find(a => a.value === rule.action)?.label || rule.action}
+                            </Tag>
+                            <Popconfirm
+                              title="删除该联动规则？"
+                              onConfirm={() => handleRuleV2Remove(ruleIdx)}
+                            >
+                              <Button
+                                type="text"
+                                size="small"
+                                danger
+                                icon={<DeleteOutlined />}
+                              />
+                            </Popconfirm>
+                          </div>
+
+                          <div style={{ padding: 8 }}>
+                            <div
+                              style={{
+                                fontSize: 11,
+                                color: '#8c8c8c',
+                                marginBottom: 6,
+                                fontWeight: 500
+                              }}
+                            >
+                              📋 条件树
+                            </div>
+                            {renderConditionNode(ruleIdx, rule.condition, 0, rule)}
+
+                            <Divider style={{ margin: '10px 0' }} />
+
+                            <Form layout="vertical" size="small">
+                              <Row gutter={8}>
+                                <Col span={12}>
+                                  <Form.Item label="执行动作">
+                                    <Select
+                                      size="small"
+                                      value={rule.action}
+                                      onChange={(val) => handleRuleV2Update(ruleIdx, { action: val as ReactionAction })}
+                                      options={ACTIONS.map(a => ({ label: a.label, value: a.value }))}
+                                    />
+                                  </Form.Item>
+                                </Col>
+                                <Col span={12}>
+                                  {(['visible', 'required', 'readonly', 'disabled'] as ReactionAction[]).includes(rule.action) && (
+                                    <Form.Item label="触发方向">
+                                      <Radio.Group
+                                        size="small"
+                                        value={rule.actionValue ?? true}
+                                        onChange={(e) => handleRuleV2Update(ruleIdx, { actionValue: e.target.value })}
+                                      >
+                                        <Radio value={true}>满足→生效</Radio>
+                                        <Radio value={false}>不满足→生效</Radio>
+                                      </Radio.Group>
+                                    </Form.Item>
+                                  )}
+                                  {rule.action === 'setValue' && (
+                                    <Form.Item label="设置默认值">
+                                      <Input
+                                        size="small"
+                                        value={String(rule.actionValue ?? '')}
+                                        onChange={(e) => handleRuleV2Update(ruleIdx, { actionValue: e.target.value })}
+                                        placeholder="条件满足时设置的默认值"
+                                      />
+                                    </Form.Item>
+                                  )}
+                                </Col>
+                              </Row>
+                            </Form>
+                          </div>
+                        </div>
+                      ))}
+                      <Button
+                        type="dashed"
+                        size="small"
+                        icon={<BranchesOutlined />}
+                        block
+                        style={{ marginTop: 8 }}
+                        onClick={handleRuleV2Add}
+                      >
+                        添加高级联动规则（支持 AND/OR 组合）
+                      </Button>
+                    </>
+                  )}
                 </div>
               )
             }
