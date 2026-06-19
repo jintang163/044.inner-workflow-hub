@@ -148,7 +148,7 @@ export interface CcTaskVO extends ApprovalTaskVO {
 export interface ApproveDTO {
   taskId: string
   instanceId: number
-  comment?: string
+  actionRemark?: string
   signatureUrl?: string
   attachmentIds?: number[]
 }
@@ -156,6 +156,17 @@ export interface ApproveDTO {
 export interface RejectDTO extends ApproveDTO {
   targetNodeId?: string
   targetNodeName?: string
+  resetFormData?: boolean
+}
+
+export interface RejectToNodeDTO {
+  taskId: string
+  instanceId?: number
+  targetNodeId: string
+  targetNodeName?: string
+  actionRemark: string
+  signatureUrl?: string
+  attachmentIds?: number[]
   resetFormData?: boolean
 }
 

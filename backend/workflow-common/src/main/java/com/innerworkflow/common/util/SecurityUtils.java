@@ -89,6 +89,21 @@ public class SecurityUtils {
     }
 
     /**
+     * 获取当前登录用户部门名称
+     */
+    public static String getCurrentDeptName() {
+        return getCurrentUser().getDeptName();
+    }
+
+    /**
+     * 获取当前登录用户头像
+     */
+    public static String getCurrentUserAvatar() {
+        LoginUserDTO user = getUserFromHolder();
+        return user != null ? null : null;
+    }
+
+    /**
      * 判断是否已登录
      */
     public static boolean isLoggedIn() {

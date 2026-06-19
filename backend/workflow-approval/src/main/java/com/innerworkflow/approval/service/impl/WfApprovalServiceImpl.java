@@ -116,6 +116,7 @@ public class WfApprovalServiceImpl implements WfApprovalService {
         instance.setInstanceNo(instanceNo);
         instance.setProcessDefinitionId(processDef.getId());
         instance.setProcessKey(processDef.getProcessKey());
+        instance.setProcessName(processDef.getProcessName());
         instance.setProcessVersionId(currentVersion.getId());
         instance.setFlowableProcessInstId(flowableInstance.getId());
         instance.setFlowableProcessDefId(currentVersion.getFlowableProcessDefId());
@@ -127,9 +128,15 @@ public class WfApprovalServiceImpl implements WfApprovalService {
         instance.setFormData(dto.getFormData());
         instance.setInstanceStatus(InstanceStatusEnum.APPROVING.getCode());
         instance.setStartUserId(userId);
+        instance.setStartUserName(SecurityUtils.getCurrentRealName());
+        instance.setStartUserAvatar(SecurityUtils.getCurrentUserAvatar());
         instance.setStartDeptId(SecurityUtils.getCurrentDeptId());
+        instance.setStartDeptName(SecurityUtils.getCurrentDeptName());
         instance.setStartTime(LocalDateTime.now());
         instance.setPriority(dto.getPriority() != null ? dto.getPriority() : 0);
+        instance.setRejectCount(0);
+        instance.setMaxRejectCount(5);
+        instance.setFormDataVersion(1);
         processInstanceService.save(instance);
 
         saveApprovalHistory(instance.getId(), null, null, "start", "发起申请",
@@ -475,19 +482,33 @@ public class WfApprovalServiceImpl implements WfApprovalService {
         if (approvalTask == null) {
             throw new BusinessException(ResultCode.NOT_FOUND, "审批任务不存在");
         }
+        if (!TaskStatusEnum.PENDING.getCode().equals(approvalTask.getTaskStatus())) {
+            throw new BusinessException(ResultCode.PARAM_ERROR, "任务已处理");
+        }
+
+        WfProcessInstance instance = processInstanceService.getById(approvalTask.getInstanceId());
+        if (instance == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND, "流程实例不存在");
+        }
+
+        int currentRejectCount = instance.getRejectCount() != null ? instance.getRejectCount() : 0;
+        int maxRejectCount = instance.getMaxRejectCount() != null ? instance.getMaxRejectCount() : 5;
+        if (currentRejectCount >= maxRejectCount) {
+            throw new BusinessException(ResultCode.PARAM_ERROR,
+                    "已达到最大驳回次数（" + maxRejectCount + "次），无法继续驳回");
+        }
+
+        List<String> rejectableNodeIds = calcRejectableNodeIds(approvalTask.getInstanceId(), task.getTaskDefinitionKey());
 
         String targetNodeId = dto.getTargetNodeId();
         if (StrUtil.isBlank(targetNodeId)) {
-            WfProcessInstance instance = processInstanceService.getById(approvalTask.getInstanceId());
-            if (instance != null) {
-                WfNodeConfig nodeConfig = nodeConfigService.getByNodeId(
-                        instance.getProcessVersionId(), task.getTaskDefinitionKey());
-                if (nodeConfig != null && nodeConfig.getRefuseStrategy() != null) {
-                    if (nodeConfig.getRefuseStrategy() == 2) {
-                        targetNodeId = getPreviousNodeId(approvalTask.getInstanceId(), task.getTaskDefinitionKey());
-                    } else if (nodeConfig.getRefuseStrategy() == 3) {
-                        targetNodeId = nodeConfig.getRefuseTargetNodeId();
-                    }
+            WfNodeConfig nodeConfig = nodeConfigService.getByNodeId(
+                    instance.getProcessVersionId(), task.getTaskDefinitionKey());
+            if (nodeConfig != null && nodeConfig.getRefuseStrategy() != null) {
+                if (nodeConfig.getRefuseStrategy() == 2) {
+                    targetNodeId = getPreviousNodeId(approvalTask.getInstanceId(), task.getTaskDefinitionKey());
+                } else if (nodeConfig.getRefuseStrategy() == 3) {
+                    targetNodeId = nodeConfig.getRefuseTargetNodeId();
                 }
             }
         }
@@ -496,24 +517,90 @@ public class WfApprovalServiceImpl implements WfApprovalService {
             throw new BusinessException(ResultCode.PARAM_ERROR, "驳回目标节点不能为空");
         }
 
+        if (!"start".equals(targetNodeId) && !rejectableNodeIds.contains(targetNodeId)) {
+            throw new BusinessException(ResultCode.PARAM_ERROR, "不允许驳回到该节点");
+        }
+
+        boolean resetFormData = Boolean.TRUE.equals(dto.getResetFormData());
+        int currentFormVersion = instance.getFormDataVersion() != null ? instance.getFormDataVersion() : 1;
+        if (resetFormData) {
+            instance.setFormData(null);
+        }
+        instance.setFormDataVersion(currentFormVersion + 1);
+        instance.setRejectCount(currentRejectCount + 1);
+        processInstanceService.updateById(instance);
+
+        Map<String, Object> variables = new HashMap<>();
+        variables.put("rejectCount", currentRejectCount + 1);
+        variables.put("maxRejectCount", maxRejectCount);
+        variables.put("formDataVersion", currentFormVersion + 1);
+        variables.put("resetFormData", resetFormData);
+        variables.put("rejectTargetNodeId", targetNodeId);
+        if (StrUtil.isNotBlank(dto.getActionRemark())) {
+            variables.put("actionRemark", dto.getActionRemark());
+            variables.put("comment", dto.getActionRemark());
+        }
+        if (!resetFormData && instance.getFormData() != null) {
+            variables.put("formData", instance.getFormData());
+        } else {
+            variables.put("formData", null);
+        }
+        runtimeService.setVariables(task.getProcessInstanceId(), variables);
+
+        taskService.addComment(dto.getTaskId(), task.getProcessInstanceId(), "REJECT_TO_NODE",
+                dto.getActionRemark() != null ? dto.getActionRemark() : "驳回到" + targetNodeId);
+
         runtimeService.createChangeActivityStateBuilder()
                 .processInstanceId(task.getProcessInstanceId())
                 .moveActivityIdTo(task.getTaskDefinitionKey(), targetNodeId)
                 .changeState();
 
         updateApprovalTask(approvalTask, TaskActionEnum.SEND_BACK.getCode(), dto.getActionRemark(),
-                userId, null, null);
+                userId, dto.getAttachmentIds(), dto.getSignatureUrl());
 
         approvalHistoryService.markInvalidByInstanceIdAndNodeId(approvalTask.getInstanceId(), task.getTaskDefinitionKey());
 
+        String targetNodeName = dto.getTargetNodeName();
+        if (StrUtil.isBlank(targetNodeName) && !"start".equals(targetNodeId)) {
+            WfNodeConfig targetNodeConfig = nodeConfigService.getByNodeId(
+                    instance.getProcessVersionId(), targetNodeId);
+            if (targetNodeConfig != null) {
+                targetNodeName = targetNodeConfig.getNodeName();
+            }
+        }
+        if (StrUtil.isBlank(targetNodeName) && "start".equals(targetNodeId)) {
+            targetNodeName = "发起节点";
+        }
+
         saveApprovalHistory(approvalTask.getInstanceId(), null, task.getTaskDefinitionKey(), task.getName(),
                 HistoryActivityTypeEnum.REJECT.getCode(), userId, SecurityUtils.getCurrentRealName(),
-                null, null, targetNodeId, null, dto.getActionRemark(), null,
-                null, null, LocalDateTime.now());
+                null, null, targetNodeId, targetNodeName, dto.getActionRemark(), dto.getSignatureUrl(),
+                dto.getAttachmentIds(), ChronoUnit.MILLIS.between(approvalTask.getAssignTime(), LocalDateTime.now()),
+                LocalDateTime.now());
 
         syncTasksFromFlowable(approvalTask.getInstanceId(), task.getProcessInstanceId());
 
-        log.info("任务驳回, taskId={}, targetNodeId={}, userId={}", dto.getTaskId(), targetNodeId, userId);
+        recordAiAdoption(approvalTask, TaskActionEnum.REJECT.getCode());
+
+        log.info("任务驳回, taskId={}, targetNodeId={}, targetNodeName={}, resetFormData={}, rejectCount={}, userId={}",
+                dto.getTaskId(), targetNodeId, targetNodeName, resetFormData, currentRejectCount + 1, userId);
+    }
+
+    private List<String> calcRejectableNodeIds(Long instanceId, String currentNodeId) {
+        Set<String> seenNodeIds = new HashSet<>();
+        List<String> result = new ArrayList<>();
+        List<WfApprovalHistory> historyList = approvalHistoryService.listValidByInstanceId(instanceId);
+        for (WfApprovalHistory h : historyList) {
+            if (h.getNodeId() == null) continue;
+            if (h.getNodeId().equals(currentNodeId)) continue;
+            if (h.getActivityType() != null && h.getActivityType() == 1) continue;
+            if (h.getActivityType() == null
+                    || (h.getActivityType() != 2 && h.getActivityType() != 7)) continue;
+            if (seenNodeIds.contains(h.getNodeId())) continue;
+            seenNodeIds.add(h.getNodeId());
+            result.add(h.getNodeId());
+        }
+        return result;
     }
 
     @Override

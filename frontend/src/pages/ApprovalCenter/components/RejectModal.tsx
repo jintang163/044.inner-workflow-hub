@@ -87,7 +87,7 @@ const RejectModal: React.FC<RejectModalProps> = ({
       await onOk({
         targetNodeId: values.targetNodeId,
         targetNodeName: targetNode?.nodeName,
-        comment: values.comment,
+        actionRemark: values.actionRemark,
         resetFormData: values.resetFormData,
         signatureUrl,
         attachmentIds: fileList.map(f => f.uid as number).filter(Boolean)
@@ -223,7 +223,7 @@ const RejectModal: React.FC<RejectModalProps> = ({
           </Form.Item>
 
           <Form.Item
-            name="comment"
+            name="actionRemark"
             label={
               <Space>
                 <span style={{ color: '#ff4d4f' }}>*</span>

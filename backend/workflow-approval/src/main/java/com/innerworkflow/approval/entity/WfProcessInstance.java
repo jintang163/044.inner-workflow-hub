@@ -48,7 +48,13 @@ public class WfProcessInstance extends BaseEntity {
 
     private Long startUserId;
 
+    private String startUserName;
+
+    private String startUserAvatar;
+
     private Long startDeptId;
+
+    private String startDeptName;
 
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime startTime;
@@ -65,4 +71,10 @@ public class WfProcessInstance extends BaseEntity {
     private List<Long> currentApproverIds;
 
     private Integer priority;
+
+    private Integer rejectCount;
+
+    private Integer maxRejectCount;
+
+    private Integer formDataVersion;
 }

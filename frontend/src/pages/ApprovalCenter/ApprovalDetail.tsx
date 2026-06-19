@@ -229,12 +229,17 @@ const ApprovalDetail: React.FC = () => {
         const isMatch = currentTask.aiRecommendation?.recommendedAction === 0
         await aiApi.recordAdoption(currentTask.aiRecommendationId, isMatch ? 1 : 2)
       }
-      await approvalApi.reject({
+      const payload = {
         taskId: currentTask.flowableTaskId,
         instanceId: currentTask.instanceId,
         ...data
-      })
-      message.success('已驳回')
+      }
+      if (data.targetNodeId) {
+        await approvalApi.rejectToNode(payload)
+      } else {
+        await approvalApi.reject(payload)
+      }
+      message.success(data.targetNodeId ? '已回退' : '已驳回')
       loadData()
     } catch (err: any) {
       message.error(err?.message || '操作失败')

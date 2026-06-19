@@ -52,6 +52,8 @@ public class WfProcessInstanceVO implements Serializable {
 
     private String startUserName;
 
+    private String startUserAvatar;
+
     private Long startDeptId;
 
     private String startDeptName;
@@ -75,4 +77,10 @@ public class WfProcessInstanceVO implements Serializable {
     private Integer priority;
 
     private String priorityName;
+
+    private Integer rejectCount;
+
+    private Integer maxRejectCount;
+
+    private Integer formDataVersion;
 }

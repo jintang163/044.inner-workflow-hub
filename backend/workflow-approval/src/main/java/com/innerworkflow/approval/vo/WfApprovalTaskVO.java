@@ -6,6 +6,7 @@ import lombok.Data;
 import java.io.Serial;
 import java.io.Serializable;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 public class WfApprovalTaskVO implements Serializable {
@@ -90,6 +91,8 @@ public class WfApprovalTaskVO implements Serializable {
 
     private String startUserName;
 
+    private String startUserAvatar;
+
     private Long startDeptId;
 
     private String startDeptName;
@@ -101,4 +104,26 @@ public class WfApprovalTaskVO implements Serializable {
     private String businessLineName;
 
     private String categoryName;
+
+    private Object formData;
+
+    private Boolean canAddSign;
+
+    private Boolean canTransfer;
+
+    private Boolean canDelegate;
+
+    private Boolean canReject;
+
+    private Boolean canWithdraw;
+
+    private Boolean needSignature;
+
+    private Boolean needComment;
+
+    private Integer rejectCount;
+
+    private Integer maxRejectCount;
+
+    private List<String> rejectableNodeIds;
 }
