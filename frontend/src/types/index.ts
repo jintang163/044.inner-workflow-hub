@@ -186,6 +186,10 @@ export interface NodeConfig {
   canDelegate: 0 | 1
   needSignature: 0 | 1
   needComment: 0 | 1
+  multiInstance: 0 | 1
+  multiInstanceCompletionType: 1 | 2 | 3
+  passPercentage: number
+  vetoEnabled: 0 | 1
 }
 
 export interface SequenceFlowConfig {

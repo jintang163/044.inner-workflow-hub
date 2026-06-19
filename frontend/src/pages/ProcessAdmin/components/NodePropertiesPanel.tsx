@@ -71,6 +71,12 @@ const REFUSE_STRATEGIES = [
   { label: '驳回到指定节点', value: 2 }
 ]
 
+const MULTI_INSTANCE_COMPLETION_TYPES = [
+  { label: '全部通过（会签）', value: 1 },
+  { label: '任一通过（或签）', value: 2 },
+  { label: '百分比通过', value: 3 }
+]
+
 const NOTIFY_CHANNELS = [
   { label: '钉钉', value: 'DINGTALK' },
   { label: '企微', value: 'WECOM' },
@@ -110,7 +116,11 @@ const DEFAULT_NODE_CONFIG: Partial<NodeConfig> = {
   canTransfer: 0,
   canDelegate: 0,
   needSignature: 0,
-  needComment: 0
+  needComment: 0,
+  multiInstance: 0,
+  multiInstanceCompletionType: 1,
+  passPercentage: 100,
+  vetoEnabled: 0
 }
 
 export default function NodePropertiesPanel({
@@ -167,7 +177,11 @@ export default function NodePropertiesPanel({
         canTransfer: merged.canTransfer === 1,
         canDelegate: merged.canDelegate === 1,
         needSignature: merged.needSignature === 1,
-        needComment: merged.needComment === 1
+        needComment: merged.needComment === 1,
+        multiInstance: merged.multiInstance === 1,
+        multiInstanceCompletionType: merged.multiInstanceCompletionType || 1,
+        passPercentage: merged.passPercentage || 100,
+        vetoEnabled: merged.vetoEnabled === 1
       })
     } else if (isSequenceFlow) {
       form.setFieldsValue({
@@ -238,6 +252,14 @@ export default function NodePropertiesPanel({
       if (changedValues.canDelegate !== undefined) updates.canDelegate = changedValues.canDelegate ? 1 : 0
       if (changedValues.needSignature !== undefined) updates.needSignature = changedValues.needSignature ? 1 : 0
       if (changedValues.needComment !== undefined) updates.needComment = changedValues.needComment ? 1 : 0
+      if (changedValues.multiInstance !== undefined) {
+        updates.multiInstance = changedValues.multiInstance ? 1 : 0
+      }
+      if (changedValues.multiInstanceCompletionType !== undefined) {
+        updates.multiInstanceCompletionType = changedValues.multiInstanceCompletionType
+      }
+      if (changedValues.passPercentage !== undefined) updates.passPercentage = changedValues.passPercentage
+      if (changedValues.vetoEnabled !== undefined) updates.vetoEnabled = changedValues.vetoEnabled ? 1 : 0
 
       if (Object.keys(updates).length > 0) {
         onNodeConfigChange(updates)
@@ -312,6 +334,10 @@ export default function NodePropertiesPanel({
     const approveType = form.getFieldValue('approveType') || 1
     const timeoutStrategy = form.getFieldValue('timeoutStrategy') || 4
     const refuseStrategy = form.getFieldValue('refuseStrategy') || 1
+    const multiInstance = form.getFieldValue('multiInstance')
+    const completionType = form.getFieldValue('multiInstanceCompletionType') || 1
+
+    const useMultiInstanceConfig = multiInstance || approveType === 2 || approveType === 1
 
     return (
       <>
@@ -332,11 +358,65 @@ export default function NodePropertiesPanel({
             <Form.Item
               label="通过比例(%)"
               name="passRate"
-              extra="会签时多少比例通过才算通过"
+              extra="会签时多少比例通过才算通过（兼容旧配置）"
               style={{ marginBottom: 12 }}
             >
               <InputNumber min={1} max={100} style={{ width: 120 }} />
             </Form.Item>
+          )}
+
+          <Divider style={{ margin: '12px 0' }} />
+          <Text strong style={{ display: 'block', marginBottom: 12 }}>
+            多实例/会签设置
+          </Text>
+
+          <Form.Item
+            label="启用多实例"
+            name="multiInstance"
+            valuePropName="checked"
+            extra="开启后将创建多人并行审批任务（会签/或签），审批类型选择或签/会签时自动启用"
+            style={{ marginBottom: 12 }}
+          >
+            <Switch />
+          </Form.Item>
+
+          {useMultiInstanceConfig && (
+            <>
+              <Form.Item
+                label="完成条件"
+                name="multiInstanceCompletionType"
+                style={{ marginBottom: 12 }}
+              >
+                <Radio.Group>
+                  {MULTI_INSTANCE_COMPLETION_TYPES.map((t) => (
+                    <Radio key={t.value} value={t.value}>
+                      {t.label}
+                    </Radio>
+                  ))}
+                </Radio.Group>
+              </Form.Item>
+
+              {completionType === 3 && (
+                <Form.Item
+                  label="通过阈值(%)"
+                  name="passPercentage"
+                  extra="同意人数达到此百分比即自动通过，如80表示80%同意即通过"
+                  style={{ marginBottom: 12 }}
+                >
+                  <InputNumber min={1} max={100} style={{ width: 120 }} />
+                </Form.Item>
+              )}
+
+              <Form.Item
+                label="一票否决"
+                name="vetoEnabled"
+                valuePropName="checked"
+                extra="开启后，任一人拒绝即整体拒绝，其他审批人无需再审批"
+                style={{ marginBottom: 0 }}
+              >
+                <Switch />
+              </Form.Item>
+            </>
           )}
 
           <Divider style={{ margin: '12px 0' }} />

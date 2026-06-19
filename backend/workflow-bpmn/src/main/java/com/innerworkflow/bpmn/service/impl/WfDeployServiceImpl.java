@@ -9,6 +9,7 @@ import com.innerworkflow.bpmn.entity.WfProcessVersion;
 import com.innerworkflow.bpmn.entity.WfSequenceFlowConfig;
 import com.innerworkflow.bpmn.service.*;
 import com.innerworkflow.bpmn.vo.WfProcessDesignVO;
+import com.innerworkflow.bpmn.listener.MultiInstanceStartListener;
 import com.innerworkflow.common.enums.ApproveTypeEnum;
 import com.innerworkflow.common.enums.AssigneeTypeEnum;
 import com.innerworkflow.common.enums.MultiInstanceCompletionTypeEnum;
@@ -387,6 +388,12 @@ public class WfDeployServiceImpl implements WfDeployService {
             return;
         }
 
+        FlowableListener executionListener = new FlowableListener();
+        executionListener.setEvent(ExecutionListener.EVENTNAME_START);
+        executionListener.setImplementationType(ImplementationType.IMPLEMENTATION_TYPE_DELEGATEEXPRESSION);
+        executionListener.setImplementation("${multiInstanceStartListener}");
+        userTask.getExecutionListeners().add(executionListener);
+
         MultiInstanceLoopCharacteristics multiInstanceLoop = new MultiInstanceLoopCharacteristics();
         multiInstanceLoop.setInputDataItem("${assigneeList}");
         multiInstanceLoop.setElementVariable("assignee");
@@ -414,27 +421,30 @@ public class WfDeployServiceImpl implements WfDeployService {
         StringBuilder condition = new StringBuilder();
 
         if (vetoEnabled != null && vetoEnabled == 1) {
-            condition.append("(${signRejectCount == 0}) && (");
+            condition.append("(signRejectCount == 0 || signRejectCount == null) && (");
         }
 
         if (completionType != null) {
             if (completionType.equals(MultiInstanceCompletionTypeEnum.ALL_PASS.getCode())) {
-                condition.append("nrOfCompletedInstances == nrOfInstances");
+                condition.append("signApproveCount == nrOfInstances");
             } else if (completionType.equals(MultiInstanceCompletionTypeEnum.ANY_PASS.getCode())) {
-                condition.append("nrOfCompletedInstances > 0");
+                condition.append("signApproveCount != null && signApproveCount > 0");
             } else if (completionType.equals(MultiInstanceCompletionTypeEnum.PERCENTAGE_PASS.getCode())) {
                 int percentage = (passPercentage != null && passPercentage > 0) ? passPercentage : 100;
-                condition.append("(nrOfCompletedInstances * 100 / nrOfInstances) >= ").append(percentage);
+                condition.append("(signApproveCount != null && 100 * signApproveCount >= ")
+                        .append(percentage).append(" * nrOfInstances)");
             }
         } else {
             if (approveType != null) {
                 if (approveType.equals(ApproveTypeEnum.ALL_SIGN.getCode())) {
-                    condition.append("nrOfCompletedInstances == nrOfInstances");
+                    condition.append("signApproveCount != null && signApproveCount == nrOfInstances");
                 } else if (approveType.equals(ApproveTypeEnum.OR_SIGN.getCode())) {
-                    condition.append("nrOfCompletedInstances > 0");
+                    condition.append("signApproveCount != null && signApproveCount > 0");
                 } else if (approveType.equals(ApproveTypeEnum.SEQUENTIAL.getCode())) {
                     condition.append("nrOfCompletedInstances == nrOfInstances");
                 }
+            } else {
+                condition.append("nrOfCompletedInstances == nrOfInstances");
             }
         }
 

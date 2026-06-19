@@ -180,6 +180,8 @@ public class WfApprovalServiceImpl implements WfApprovalService {
             variables.put("comment", dto.getActionRemark());
         }
 
+        updateMultiInstanceSignCounters(task, true);
+
         taskService.addComment(dto.getTaskId(), task.getProcessInstanceId(), "AGREE",
                 dto.getActionRemark() != null ? dto.getActionRemark() : "同意");
 
@@ -239,6 +241,8 @@ public class WfApprovalServiceImpl implements WfApprovalService {
         if (StrUtil.isNotBlank(dto.getActionRemark())) {
             variables.put("comment", dto.getActionRemark());
         }
+
+        updateMultiInstanceSignCounters(task, false);
 
         taskService.addComment(dto.getTaskId(), task.getProcessInstanceId(), "REJECT",
                 dto.getActionRemark() != null ? dto.getActionRemark() : "拒绝");
@@ -1791,5 +1795,112 @@ public class WfApprovalServiceImpl implements WfApprovalService {
         }
 
         return signer;
+    }
+
+    private void updateMultiInstanceSignCounters(Task task, boolean isApprove) {
+        try {
+            String processInstanceId = task.getProcessInstanceId();
+            String taskDefinitionKey = task.getTaskDefinitionKey();
+            String executionId = task.getExecutionId();
+
+            WfApprovalTask approvalTask = approvalTaskService.getByFlowableTaskId(task.getId());
+            if (approvalTask == null || approvalTask.getInstanceId() == null) {
+                return;
+            }
+
+            WfProcessInstance instance = processInstanceService.getById(approvalTask.getInstanceId());
+            if (instance == null || instance.getProcessVersionId() == null) {
+                return;
+            }
+
+            WfNodeConfig nodeConfig = nodeConfigService.getByNodeId(instance.getProcessVersionId(), taskDefinitionKey);
+            if (nodeConfig == null) {
+                return;
+            }
+
+            boolean isMultiInstance = (nodeConfig.getMultiInstance() != null && nodeConfig.getMultiInstance() == 1)
+                    || (nodeConfig.getApproveType() != null
+                    && (nodeConfig.getApproveType().equals(ApproveTypeEnum.ALL_SIGN.getCode())
+                    || nodeConfig.getApproveType().equals(ApproveTypeEnum.OR_SIGN.getCode())));
+
+            if (!isMultiInstance) {
+                return;
+            }
+
+            String rootExecutionId = findMultiInstanceRootExecutionId(processInstanceId, executionId, taskDefinitionKey);
+            if (rootExecutionId == null) {
+                rootExecutionId = processInstanceId;
+            }
+
+            Integer currentApprove = getExecutionVariableAsInt(rootExecutionId, "signApproveCount");
+            Integer currentReject = getExecutionVariableAsInt(rootExecutionId, "signRejectCount");
+
+            if (isApprove) {
+                currentApprove = (currentApprove == null ? 0 : currentApprove) + 1;
+                runtimeService.setVariable(rootExecutionId, "signApproveCount", currentApprove);
+                runtimeService.setVariableLocal(rootExecutionId, "signApproveCount", currentApprove);
+                log.info("多实例同意计数更新, nodeId={}, rootExecutionId={}, approveCount={}",
+                        taskDefinitionKey, rootExecutionId, currentApprove);
+            } else {
+                currentReject = (currentReject == null ? 0 : currentReject) + 1;
+                runtimeService.setVariable(rootExecutionId, "signRejectCount", currentReject);
+                runtimeService.setVariableLocal(rootExecutionId, "signRejectCount", currentReject);
+                log.info("多实例拒绝计数更新, nodeId={}, rootExecutionId={}, rejectCount={}",
+                        taskDefinitionKey, rootExecutionId, currentReject);
+            }
+
+        } catch (Exception e) {
+            log.error("更新多实例会签计数失败, taskId={}, isApprove={}, error={}",
+                    task.getId(), isApprove, e.getMessage(), e);
+        }
+    }
+
+    private String findMultiInstanceRootExecutionId(String processInstanceId, String executionId, String taskDefinitionKey) {
+        try {
+            List<Execution> executions = runtimeService.createExecutionQuery()
+                    .processInstanceId(processInstanceId)
+                    .activityId(taskDefinitionKey)
+                    .list();
+            if (executions != null && !executions.isEmpty()) {
+                Execution parentExecution = runtimeService.createExecutionQuery()
+                        .executionId(executions.get(0).getParentId())
+                        .singleResult();
+                if (parentExecution != null) {
+                    return parentExecution.getId();
+                }
+            }
+            Execution current = runtimeService.createExecutionQuery()
+                    .executionId(executionId)
+                    .singleResult();
+            if (current != null && current.getParentId() != null) {
+                return current.getParentId();
+            }
+            return processInstanceId;
+        } catch (Exception e) {
+            log.warn("查找多实例根执行流失败, executionId={}, error={}", executionId, e.getMessage());
+            return processInstanceId;
+        }
+    }
+
+    private Integer getExecutionVariableAsInt(String executionId, String key) {
+        try {
+            Object val = runtimeService.getVariable(executionId, key);
+            if (val == null) {
+                return null;
+            }
+            if (val instanceof Number) {
+                return ((Number) val).intValue();
+            }
+            if (val instanceof String) {
+                try {
+                    return Integer.parseInt((String) val);
+                } catch (NumberFormatException e) {
+                    return null;
+                }
+            }
+            return null;
+        } catch (Exception e) {
+            return null;
+        }
     }
 }
