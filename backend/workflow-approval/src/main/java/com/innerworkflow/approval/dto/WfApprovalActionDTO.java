@@ -17,6 +17,10 @@ public class WfApprovalActionDTO implements Serializable {
     @NotBlank(message = "任务ID不能为空")
     private String taskId;
 
+    private Long instanceId;
+
+    private Integer version;
+
     private String actionRemark;
 
     private List<Long> attachmentIds;

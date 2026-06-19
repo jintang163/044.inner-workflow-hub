@@ -83,4 +83,6 @@ public class WfProcessInstanceVO implements Serializable {
     private Integer maxRejectCount;
 
     private Integer formDataVersion;
+
+    private Integer version;
 }

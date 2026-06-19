@@ -46,7 +46,12 @@ public enum ResultCode {
     /**
      * 流程错误
      */
-    PROCESS_ERROR(2001, "流程处理异常");
+    PROCESS_ERROR(2001, "流程处理异常"),
+
+    /**
+     * 版本冲突
+     */
+    VERSION_CONFLICT(2002, "内容已更新，请刷新后重试");
 
     /**
      * 状态码

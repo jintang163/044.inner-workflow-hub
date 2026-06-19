@@ -31,13 +31,16 @@ service.interceptors.response.use(
   (response: AxiosResponse) => {
     const res = response.data as ApiResponse
     if (res.code !== 200) {
-      message.error(res.message || '请求失败')
       if (res.code === 401) {
+        message.error(res.message || '登录已过期，请重新登录')
         const { logout } = useUserStore.getState()
         logout()
         window.location.href = '/login'
       }
-      return Promise.reject(new Error(res.message || '请求失败'))
+      const err = new Error(res.message || '请求失败') as any
+      err.code = res.code
+      err.message = res.message || '请求失败'
+      return Promise.reject(err)
     }
     return res.data
   },
@@ -59,6 +62,11 @@ service.interceptors.response.use(
         message.error(data?.message || '服务器内部错误')
       } else {
         message.error(data?.message || `请求错误 (${status})`)
+      }
+      if (data?.code) {
+        const err = new Error(data.message || `请求错误 (${status})`) as any
+        err.code = data.code
+        return Promise.reject(err)
       }
     } else if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
       message.error('请求超时，请稍后重试')

@@ -17,6 +17,10 @@ public class WfAddSignDTO implements Serializable {
     @NotBlank(message = "任务ID不能为空")
     private String taskId;
 
+    private Long instanceId;
+
+    private Integer version;
+
     @NotNull(message = "加签人ID列表不能为空")
     private List<Long> targetUserIds;
 

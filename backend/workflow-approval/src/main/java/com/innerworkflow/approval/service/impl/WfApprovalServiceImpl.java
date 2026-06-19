@@ -14,6 +14,7 @@ import com.innerworkflow.bpmn.service.WfProcessDefinitionService;
 import com.innerworkflow.bpmn.service.WfProcessVersionService;
 import com.innerworkflow.common.dto.LoginUserDTO;
 import com.innerworkflow.common.enums.*;
+import com.innerworkflow.common.event.ApprovalStatusUpdateEvent;
 import com.innerworkflow.common.exception.BusinessException;
 import com.innerworkflow.common.util.JsonUtils;
 import com.innerworkflow.common.util.SecurityUtils;
@@ -36,6 +37,7 @@ import org.flowable.engine.runtime.ProcessInstance;
 import org.flowable.task.api.Task;
 import org.flowable.task.api.history.HistoricTaskInstance;
 import org.springframework.scheduling.annotation.Async;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -74,6 +76,7 @@ public class WfApprovalServiceImpl implements WfApprovalService {
     private final WfDelegationService delegationService;
     private final WfTransferRecordService transferRecordService;
     private final SysUserService sysUserService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -180,6 +183,8 @@ public class WfApprovalServiceImpl implements WfApprovalService {
             throw new BusinessException(ResultCode.PARAM_ERROR, "任务已处理");
         }
 
+        checkVersion(approvalTask.getInstanceId(), dto.getVersion());
+
         Map<String, Object> variables = new HashMap<>();
         variables.put("approved", true);
         variables.put("approveUserId", userId);
@@ -209,6 +214,9 @@ public class WfApprovalServiceImpl implements WfApprovalService {
 
         recordAiAdoption(approvalTask, TaskActionEnum.AGREE.getCode());
 
+        publishStatusUpdate(approvalTask.getInstanceId(), "AGREE", "审批通过",
+                userId, SecurityUtils.getCurrentRealName());
+
         log.info("审批同意, taskId={}, instanceId={}, userId={}", dto.getTaskId(), task.getProcessInstanceId(), userId);
     }
 
@@ -232,6 +240,8 @@ public class WfApprovalServiceImpl implements WfApprovalService {
         if (!TaskStatusEnum.PENDING.getCode().equals(approvalTask.getTaskStatus())) {
             throw new BusinessException(ResultCode.PARAM_ERROR, "任务已处理");
         }
+
+        checkVersion(approvalTask.getInstanceId(), dto.getVersion());
 
         WfProcessInstance instance = processInstanceService.getById(approvalTask.getInstanceId());
 
@@ -271,6 +281,9 @@ public class WfApprovalServiceImpl implements WfApprovalService {
 
         recordAiAdoption(approvalTask, TaskActionEnum.REJECT.getCode());
 
+        publishStatusUpdate(approvalTask.getInstanceId(), "REJECT", "拒绝",
+                userId, SecurityUtils.getCurrentRealName());
+
         log.info("审批拒绝, taskId={}, instanceId={}, userId={}", dto.getTaskId(), task.getProcessInstanceId(), userId);
     }
 
@@ -297,6 +310,8 @@ public class WfApprovalServiceImpl implements WfApprovalService {
         if (approvalTask == null) {
             throw new BusinessException(ResultCode.NOT_FOUND, "审批任务不存在");
         }
+
+        checkVersion(approvalTask.getInstanceId(), dto.getVersion());
 
         taskService.setAssignee(dto.getTaskId(), dto.getTargetUserId().toString());
 
@@ -351,6 +366,9 @@ public class WfApprovalServiceImpl implements WfApprovalService {
 
         sendTransferNotify(approvalTask, userId, dto.getTargetUserId(), dto.getActionRemark());
 
+        publishStatusUpdate(approvalTask.getInstanceId(), "TRANSFER", "转审",
+                userId, SecurityUtils.getCurrentRealName());
+
         log.info("任务转审, taskId={}, targetUserId={}, userId={}", dto.getTaskId(), dto.getTargetUserId(), userId);
     }
 
@@ -371,6 +389,8 @@ public class WfApprovalServiceImpl implements WfApprovalService {
         if (approvalTask == null) {
             throw new BusinessException(ResultCode.NOT_FOUND, "审批任务不存在");
         }
+
+        checkVersion(approvalTask.getInstanceId(), dto.getVersion());
 
         WfProcessInstance instance = processInstanceService.getById(approvalTask.getInstanceId());
         WfNodeConfig nodeConfig = null;
@@ -427,6 +447,9 @@ public class WfApprovalServiceImpl implements WfApprovalService {
                 null, null, null, null, dto.getActionRemark(), null,
                 null, null, LocalDateTime.now());
 
+        publishStatusUpdate(approvalTask.getInstanceId(), "ADD_SIGN", "加签",
+                userId, SecurityUtils.getCurrentRealName());
+
         log.info("任务加签, taskId={}, targetUserIds={}, userId={}", dto.getTaskId(), dto.getTargetUserIds(), userId);
     }
 
@@ -448,6 +471,8 @@ public class WfApprovalServiceImpl implements WfApprovalService {
             throw new BusinessException(ResultCode.NOT_FOUND, "审批任务不存在");
         }
 
+        checkVersion(approvalTask.getInstanceId(), dto.getVersion());
+
         taskService.delegateTask(dto.getTaskId(), dto.getTargetUserId().toString());
 
         approvalTask.setTaskStatus(TaskStatusEnum.DELEGATED.getCode());
@@ -461,6 +486,9 @@ public class WfApprovalServiceImpl implements WfApprovalService {
                 HistoryActivityTypeEnum.DELEGATE.getCode(), userId, SecurityUtils.getCurrentRealName(),
                 dto.getTargetUserId(), null, null, null, dto.getActionRemark(), null,
                 null, null, LocalDateTime.now());
+
+        publishStatusUpdate(approvalTask.getInstanceId(), "DELEGATE", "委派",
+                userId, SecurityUtils.getCurrentRealName());
 
         log.info("任务委派, taskId={}, targetUserId={}, userId={}", dto.getTaskId(), dto.getTargetUserId(), userId);
     }
@@ -485,6 +513,8 @@ public class WfApprovalServiceImpl implements WfApprovalService {
         if (!TaskStatusEnum.PENDING.getCode().equals(approvalTask.getTaskStatus())) {
             throw new BusinessException(ResultCode.PARAM_ERROR, "任务已处理");
         }
+
+        checkVersion(approvalTask.getInstanceId(), dto.getVersion());
 
         WfProcessInstance instance = processInstanceService.getById(approvalTask.getInstanceId());
         if (instance == null) {
@@ -584,6 +614,9 @@ public class WfApprovalServiceImpl implements WfApprovalService {
 
         log.info("任务驳回, taskId={}, targetNodeId={}, targetNodeName={}, resetFormData={}, rejectCount={}, userId={}",
                 dto.getTaskId(), targetNodeId, targetNodeName, resetFormData, currentRejectCount + 1, userId);
+
+        publishStatusUpdate(approvalTask.getInstanceId(), "REJECT_TO_NODE", "驳回至节点",
+                userId, SecurityUtils.getCurrentRealName());
     }
 
     private List<String> calcRejectableNodeIds(Long instanceId, String currentNodeId) {
@@ -606,10 +639,15 @@ public class WfApprovalServiceImpl implements WfApprovalService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void withdraw(WfWithdrawDTO dto) {
-        WfProcessInstance instance = processInstanceService.getById(Long.valueOf(dto.getInstanceId()));
+        Long instanceId = dto.getInstanceLongId() != null
+                ? dto.getInstanceLongId()
+                : Long.valueOf(dto.getInstanceId());
+        WfProcessInstance instance = processInstanceService.getById(instanceId);
         if (instance == null) {
             throw new BusinessException(ResultCode.NOT_FOUND, "流程实例不存在");
         }
+
+        checkVersion(instanceId, dto.getVersion());
 
         Long userId = SecurityUtils.getCurrentUserId();
         if (!userId.equals(instance.getStartUserId())) {
@@ -640,6 +678,9 @@ public class WfApprovalServiceImpl implements WfApprovalService {
                 LocalDateTime.now());
 
         log.info("流程撤回, instanceId={}, userId={}", dto.getInstanceId(), userId);
+
+        publishStatusUpdate(instanceId, "WITHDRAW", "撤回",
+                userId, SecurityUtils.getCurrentRealName());
     }
 
     @Override
@@ -2238,5 +2279,44 @@ public class WfApprovalServiceImpl implements WfApprovalService {
         }
 
         return operators;
+    }
+
+    private void checkVersion(Long instanceId, Integer version) {
+        if (version == null) {
+            return;
+        }
+        WfProcessInstance instance = processInstanceService.getById(instanceId);
+        if (instance == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND, "流程实例不存在");
+        }
+        if (!version.equals(instance.getVersion())) {
+            throw new BusinessException(ResultCode.VERSION_CONFLICT);
+        }
+    }
+
+    private void publishStatusUpdate(Long instanceId, String actionType, String actionTypeName,
+                                     Long operatorId, String operatorName) {
+        try {
+            WfProcessInstance instance = processInstanceService.getById(instanceId);
+            if (instance == null) return;
+
+            InstanceStatusEnum statusEnum = InstanceStatusEnum.getByCode(instance.getInstanceStatus());
+            ApprovalStatusUpdateEvent.EventPayload payload = ApprovalStatusUpdateEvent.EventPayload.builder()
+                    .instanceId(instance.getId())
+                    .instanceNo(instance.getInstanceNo())
+                    .instanceStatus(instance.getInstanceStatus())
+                    .instanceStatusName(statusEnum != null ? statusEnum.getDesc() : null)
+                    .actionType(actionType)
+                    .actionTypeName(actionTypeName)
+                    .operatorId(operatorId)
+                    .operatorName(operatorName)
+                    .version(instance.getVersion())
+                    .timestamp(LocalDateTime.now())
+                    .build();
+            eventPublisher.publishEvent(new ApprovalStatusUpdateEvent(this, payload));
+            log.debug("已发布审批状态更新事件, instanceId={}, actionType={}", instanceId, actionType);
+        } catch (Exception e) {
+            log.warn("发布审批状态更新事件失败, instanceId={}, error={}", instanceId, e.getMessage());
+        }
     }
 }

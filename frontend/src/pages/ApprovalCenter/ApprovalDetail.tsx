@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import {
   Card,
@@ -20,7 +20,8 @@ import {
   Input,
   List,
   Divider,
-  Alert
+  Alert,
+  notification
 } from 'antd'
 import {
   ArrowLeftOutlined,
@@ -28,7 +29,9 @@ import {
   UserOutlined,
   PrinterOutlined,
   ExclamationCircleOutlined,
-  ReloadOutlined
+  ReloadOutlined,
+  WarningOutlined,
+  SyncOutlined
 } from '@ant-design/icons'
 import ApprovalTimeline from './components/ApprovalTimeline'
 import FlowDiagram from './components/FlowDiagram'
@@ -37,10 +40,12 @@ import MultiInstanceSignCard from './components/MultiInstanceSignCard'
 import ApprovalTrackingMap from './components/ApprovalTrackingMap'
 import AiRecommendationCard from '@/components/business/AiRecommendationCard'
 import { approvalApi, formApi, aiApi } from '@/api'
-import type { ProcessInstanceVO, ApprovalHistoryVO, ApprovalTaskVO, MultiInstanceSignVO, TrackingMapVO } from '@/types/approval'
+import type { ProcessInstanceVO, ApprovalHistoryVO, ApprovalTaskVO, MultiInstanceSignVO, TrackingMapVO, ApprovalStatusUpdateVO } from '@/types/approval'
 import type { FormilySchema } from '@/types/form'
 import type { AiRecommendationVO } from '@/types/ai'
 import FormRenderer from '@/components/FormRenderer'
+import { useWebSocket } from '@/hooks/useWebSocket'
+import { WS_BASE_URL, RESULT_CODE_VERSION_CONFLICT } from '@/config/websocket'
 import dayjs from 'dayjs'
 
 const { Text, Title, Paragraph } = Typography
@@ -100,6 +105,41 @@ const ApprovalDetail: React.FC = () => {
   const [schemaLoading, setSchemaLoading] = useState(false)
   const [multiInstanceSignList, setMultiInstanceSignList] = useState<MultiInstanceSignVO[]>([])
   const [trackingMap, setTrackingMap] = useState<TrackingMapVO | null>(null)
+  const [version, setVersion] = useState<number | undefined>()
+  const [remoteUpdateAlert, setRemoteUpdateAlert] = useState<{ show: boolean; operatorName?: string; actionTypeName?: string }>({ show: false })
+  const notificationShownRef = useRef(false)
+
+  const { subscribe, unsubscribe } = useWebSocket({
+    url: WS_BASE_URL,
+    onMessage: (message: ApprovalStatusUpdateVO) => {
+      if (message.type === 'STATUS_UPDATE' && message.instanceNo === instanceNo) {
+        if (message.version !== undefined && version !== undefined && message.version > version) {
+          setRemoteUpdateAlert({
+            show: true,
+            operatorName: message.operatorName,
+            actionTypeName: message.actionTypeName
+          })
+          if (!notificationShownRef.current) {
+            notification.warning({
+              message: '审批单已更新',
+              description: `${message.operatorName} 已执行「${message.actionTypeName}」操作，内容已变更，请刷新查看。`,
+              duration: 0,
+              icon: <WarningOutlined style={{ color: '#faad14' }} />,
+              btn: (
+                <Button type="primary" size="small" onClick={() => {
+                  notification.destroy()
+                  loadData()
+                }}>
+                  <SyncOutlined /> 立即刷新
+                </Button>
+              )
+            })
+            notificationShownRef.current = true
+          }
+        }
+      }
+    }
+  })
 
   const instanceNo = id || ''
 
@@ -115,6 +155,27 @@ const ApprovalDetail: React.FC = () => {
     maxRejectCount: currentTask.maxRejectCount ?? maxRejectCount
   } : null
 
+  const handleVersionConflict = useCallback(() => {
+    Modal.confirm({
+      title: '内容已更新',
+      icon: <WarningOutlined style={{ color: '#faad14' }} />,
+      content: '该审批单已被其他人修改，请刷新页面后重试。',
+      okText: '立即刷新',
+      cancelText: '取消',
+      onOk: () => {
+        window.location.reload()
+      }
+    })
+  }, [])
+
+  const handleActionError = useCallback((err: any) => {
+    if (err?.code === RESULT_CODE_VERSION_CONFLICT) {
+      handleVersionConflict()
+    } else {
+      message.error(err?.message || '操作失败')
+    }
+  }, [handleVersionConflict])
+
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
@@ -126,6 +187,13 @@ const ApprovalDetail: React.FC = () => {
       setHistory(histRes)
       setMultiInstanceSignList(instRes?.multiInstanceSignList || [])
       setTrackingMap(instRes?.trackingMap || null)
+
+      const newVersion = instRes?.version ?? currentTask?.version
+      if (newVersion !== undefined) {
+        setVersion(newVersion)
+      }
+      setRemoteUpdateAlert({ show: false })
+      notificationShownRef.current = false
 
       if (passedTask) {
         setCurrentTask(passedTask)
@@ -199,6 +267,17 @@ const ApprovalDetail: React.FC = () => {
     }
   }, [instanceNo, loadData])
 
+  useEffect(() => {
+    if (instanceNo) {
+      subscribe(instanceNo)
+    }
+    return () => {
+      if (instanceNo) {
+        unsubscribe(instanceNo)
+      }
+    }
+  }, [instanceNo, subscribe, unsubscribe])
+
   const handleApprove = async (data: any) => {
     if (!currentTask) return
     try {
@@ -210,12 +289,13 @@ const ApprovalDetail: React.FC = () => {
       await approvalApi.approve({
         taskId: currentTask.flowableTaskId,
         instanceId: currentTask.instanceId,
+        version,
         ...data
       })
       message.success('审批成功')
       loadData()
     } catch (err: any) {
-      message.error(err?.message || '操作失败')
+      handleActionError(err)
     } finally {
       setActionLoading(false)
     }
@@ -232,6 +312,7 @@ const ApprovalDetail: React.FC = () => {
       const payload = {
         taskId: currentTask.flowableTaskId,
         instanceId: currentTask.instanceId,
+        version,
         ...data
       }
       if (data.targetNodeId) {
@@ -242,7 +323,7 @@ const ApprovalDetail: React.FC = () => {
       message.success(data.targetNodeId ? '已回退' : '已驳回')
       loadData()
     } catch (err: any) {
-      message.error(err?.message || '操作失败')
+      handleActionError(err)
     } finally {
       setActionLoading(false)
     }
@@ -255,12 +336,13 @@ const ApprovalDetail: React.FC = () => {
       await approvalApi.transfer({
         taskId: currentTask.flowableTaskId,
         instanceId: currentTask.instanceId,
+        version,
         ...data
       })
       message.success('转审成功')
       loadData()
     } catch (err: any) {
-      message.error(err?.message || '操作失败')
+      handleActionError(err)
     } finally {
       setActionLoading(false)
     }
@@ -273,12 +355,13 @@ const ApprovalDetail: React.FC = () => {
       await approvalApi.addSign({
         taskId: currentTask.flowableTaskId,
         instanceId: currentTask.instanceId,
+        version,
         ...data
       })
       message.success('加签成功')
       loadData()
     } catch (err: any) {
-      message.error(err?.message || '操作失败')
+      handleActionError(err)
     } finally {
       setActionLoading(false)
     }
@@ -291,12 +374,13 @@ const ApprovalDetail: React.FC = () => {
       await approvalApi.delegate({
         taskId: currentTask.flowableTaskId,
         instanceId: currentTask.instanceId,
+        version,
         ...data
       })
       message.success('委派成功')
       loadData()
     } catch (err: any) {
-      message.error(err?.message || '操作失败')
+      handleActionError(err)
     } finally {
       setActionLoading(false)
     }
@@ -309,14 +393,16 @@ const ApprovalDetail: React.FC = () => {
       setActionLoading(true)
       await approvalApi.withdraw({
         instanceId: instance.id,
-        comment: values.reason
+        instanceLongId: instance.id,
+        version,
+        actionRemark: values.reason
       })
       message.success('撤回成功')
       setWithdrawOpen(false)
       loadData()
     } catch (err: any) {
       if (err?.errorFields) return
-      message.error(err?.message || '撤回失败')
+      handleActionError(err)
     } finally {
       setActionLoading(false)
     }
@@ -417,6 +503,26 @@ const ApprovalDetail: React.FC = () => {
                 { title: instance?.processName || '审批详情' }
               ]}
             />
+
+            {remoteUpdateAlert.show && (
+              <Alert
+                message={
+                  <Space>
+                    <WarningOutlined style={{ color: '#faad14' }} />
+                    <span>
+                      <strong>{remoteUpdateAlert.operatorName}</strong> 已执行「{remoteUpdateAlert.actionTypeName}」操作，内容已更新
+                    </span>
+                    <Button type="primary" size="small" onClick={loadData}>
+                      <SyncOutlined /> 立即刷新
+                    </Button>
+                  </Space>
+                }
+                type="warning"
+                showIcon={false}
+                closable
+                onClose={() => setRemoteUpdateAlert({ show: false })}
+              />
+            )}
 
             <Space style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap' }}>
               <Space size={16} wrap>

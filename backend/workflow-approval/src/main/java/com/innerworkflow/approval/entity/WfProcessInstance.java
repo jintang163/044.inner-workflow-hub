@@ -2,6 +2,7 @@ package com.innerworkflow.approval.entity;
 
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.annotation.Version;
 import com.innerworkflow.common.entity.BaseEntity;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Data;
@@ -77,4 +78,7 @@ public class WfProcessInstance extends BaseEntity {
     private Integer maxRejectCount;
 
     private Integer formDataVersion;
+
+    @Version
+    private Integer version;
 }

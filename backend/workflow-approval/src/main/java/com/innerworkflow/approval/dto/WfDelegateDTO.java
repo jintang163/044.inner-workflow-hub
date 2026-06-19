@@ -16,6 +16,10 @@ public class WfDelegateDTO implements Serializable {
     @NotBlank(message = "任务ID不能为空")
     private String taskId;
 
+    private Long instanceId;
+
+    private Integer version;
+
     @NotNull(message = "委派人ID不能为空")
     private Long targetUserId;
 

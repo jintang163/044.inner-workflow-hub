@@ -53,6 +53,7 @@ export interface ApprovalTaskVO {
   rejectCount?: number
   maxRejectCount?: number
   rejectableNodeIds?: string[]
+  version?: number
   aiRecommendation?: import('./ai').AiRecommendationVO
   aiRecommendationId?: number
 }
@@ -148,6 +149,7 @@ export interface CcTaskVO extends ApprovalTaskVO {
 export interface ApproveDTO {
   taskId: string
   instanceId: number
+  version?: number
   actionRemark?: string
   signatureUrl?: string
   attachmentIds?: number[]
@@ -162,6 +164,7 @@ export interface RejectDTO extends ApproveDTO {
 export interface RejectToNodeDTO {
   taskId: string
   instanceId?: number
+  version?: number
   targetNodeId: string
   targetNodeName?: string
   actionRemark: string
@@ -342,4 +345,23 @@ export interface TrackingMapVO {
   historicalInstanceCount?: number
   nodes: TrackingNodeVO[]
   edges: TrackingEdgeVO[]
+}
+
+export interface ApprovalStatusUpdateVO {
+  type: 'STATUS_UPDATE'
+  instanceId: number
+  instanceNo: string
+  instanceStatus: InstanceStatus
+  instanceStatusName?: string
+  actionType: string
+  actionTypeName: string
+  operatorId: number
+  operatorName: string
+  version: number
+  timestamp: string
+}
+
+export interface WebSocketMessage<T = any> {
+  type: string
+  data?: T
 }

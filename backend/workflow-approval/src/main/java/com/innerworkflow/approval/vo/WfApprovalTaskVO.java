@@ -126,4 +126,6 @@ public class WfApprovalTaskVO implements Serializable {
     private Integer maxRejectCount;
 
     private List<String> rejectableNodeIds;
+
+    private Integer version;
 }

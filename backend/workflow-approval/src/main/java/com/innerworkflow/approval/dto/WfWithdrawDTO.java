@@ -15,5 +15,9 @@ public class WfWithdrawDTO implements Serializable {
     @NotBlank(message = "实例ID不能为空")
     private String instanceId;
 
+    private Long instanceLongId;
+
+    private Integer version;
+
     private String actionRemark;
 }

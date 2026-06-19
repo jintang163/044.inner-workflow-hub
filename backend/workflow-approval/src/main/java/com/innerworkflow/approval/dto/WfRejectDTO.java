@@ -19,6 +19,8 @@ public class WfRejectDTO implements Serializable {
 
     private Long instanceId;
 
+    private Integer version;
+
     private String targetNodeId;
 
     private String targetNodeName;
