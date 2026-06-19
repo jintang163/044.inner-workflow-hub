@@ -36,6 +36,8 @@ public class WfProcessDetailVO implements Serializable {
 
     private List<WfMultiInstanceSignVO> multiInstanceSignList;
 
+    private WfTrackingMapVO trackingMap;
+
     private List<WfProcessInstanceRelationVO> childProcessInstanceList;
 
     private WfProcessInstanceRelationVO parentProcessInstance;

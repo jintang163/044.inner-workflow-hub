@@ -278,3 +278,48 @@ export interface MultiInstanceSignVO {
   progressText: string
   signers: SignerStatusVO[]
 }
+
+export interface TrackingNodeOperatorVO {
+  userId: number
+  userName: string
+  userAvatar?: string
+  deptName?: string
+  action?: string
+  actionName?: string
+  actionRemark?: string
+  operateTime?: string
+  duration?: number
+}
+
+export interface TrackingNodeVO {
+  nodeId: string
+  nodeName: string
+  nodeType: string
+  nodeCategory: number
+  status: string
+  statusName: string
+  duration?: number
+  durationDeviation?: number
+  isBottleneck?: boolean
+  operators: TrackingNodeOperatorVO[]
+  startTime?: string
+  endTime?: string
+  actionRemark?: string
+  signatureUrl?: string
+}
+
+export interface TrackingEdgeVO {
+  sourceId: string
+  targetId: string
+  label?: string
+  isActualPath?: boolean
+}
+
+export interface TrackingMapVO {
+  instanceId: number
+  instanceNo: string
+  title: string
+  averageDuration?: number
+  nodes: TrackingNodeVO[]
+  edges: TrackingEdgeVO[]
+}

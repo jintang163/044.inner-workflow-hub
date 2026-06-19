@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@ant-design/icons": "^5.3.7",
+    "@antv/g6": "^4.8.24",
     "antd": "^5.17.4",
     "axios": "^1.7.2",
     "bpmn-js": "^17.11.0",

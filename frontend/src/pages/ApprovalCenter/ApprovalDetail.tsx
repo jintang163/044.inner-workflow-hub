@@ -34,9 +34,10 @@ import ApprovalTimeline from './components/ApprovalTimeline'
 import FlowDiagram from './components/FlowDiagram'
 import ApprovalActionBar from './components/ApprovalActionBar'
 import MultiInstanceSignCard from './components/MultiInstanceSignCard'
+import ApprovalTrackingMap from './components/ApprovalTrackingMap'
 import AiRecommendationCard from '@/components/business/AiRecommendationCard'
 import { approvalApi, formApi, aiApi } from '@/api'
-import type { ProcessInstanceVO, ApprovalHistoryVO, ApprovalTaskVO, MultiInstanceSignVO } from '@/types/approval'
+import type { ProcessInstanceVO, ApprovalHistoryVO, ApprovalTaskVO, MultiInstanceSignVO, TrackingMapVO } from '@/types/approval'
 import type { FormilySchema } from '@/types/form'
 import type { AiRecommendationVO } from '@/types/ai'
 import FormRenderer from '@/components/FormRenderer'
@@ -98,6 +99,7 @@ const ApprovalDetail: React.FC = () => {
   const [formSchema, setFormSchema] = useState<FormilySchema | null>(null)
   const [schemaLoading, setSchemaLoading] = useState(false)
   const [multiInstanceSignList, setMultiInstanceSignList] = useState<MultiInstanceSignVO[]>([])
+  const [trackingMap, setTrackingMap] = useState<TrackingMapVO | null>(null)
 
   const instanceNo = id || ''
 
@@ -114,6 +116,7 @@ const ApprovalDetail: React.FC = () => {
       setInstance(instRes)
       setHistory(histRes)
       setMultiInstanceSignList(instRes?.multiInstanceSignList || [])
+      setTrackingMap(instRes?.trackingMap || null)
 
       if (passedTask) {
         setCurrentTask(passedTask)
@@ -545,6 +548,15 @@ const ApprovalDetail: React.FC = () => {
                     )
                   }] : []),
                   {
+                    key: 'tracking',
+                    label: (
+                      <Space size={4}>
+                        <span>🗺️</span>
+                        <span>跟踪地图</span>
+                      </Space>
+                    )
+                  },
+                  {
                     key: 'flow',
                     label: (
                       <Space size={4}>
@@ -566,6 +578,13 @@ const ApprovalDetail: React.FC = () => {
                       <MultiInstanceSignCard key={signData.nodeId || index} signData={signData} />
                     ))}
                   </Space>
+                )}
+                {activeTab === 'tracking' && (
+                  <ApprovalTrackingMap
+                    trackingMap={trackingMap || undefined}
+                    loading={loading}
+                    height={520}
+                  />
                 )}
                 {activeTab === 'flow' && (
                   <FlowDiagram

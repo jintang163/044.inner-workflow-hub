@@ -708,6 +708,13 @@ public class WfApprovalServiceImpl implements WfApprovalService {
             log.error("构建会签节点状态失败, instanceId={}, error={}", instanceId, e.getMessage(), e);
         }
 
+        try {
+            WfTrackingMapVO trackingMap = buildTrackingMap(instance, historicActivities, bpmnModel);
+            detailVO.setTrackingMap(trackingMap);
+        } catch (Exception e) {
+            log.error("构建审批跟踪地图失败, instanceId={}, error={}", instanceId, e.getMessage(), e);
+        }
+
         List<WfProcessInstanceRelationVO> childProcessList = processInstanceRelationService.listByParentInstanceId(instanceId);
         detailVO.setChildProcessInstanceList(childProcessList);
 
@@ -1902,5 +1909,152 @@ public class WfApprovalServiceImpl implements WfApprovalService {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    private WfTrackingMapVO buildTrackingMap(WfProcessInstance instance,
+                                             List<HistoricActivityInstance> historicActivities,
+                                             BpmnModel bpmnModel) {
+        WfTrackingMapVO trackingMap = new WfTrackingMapVO();
+        trackingMap.setInstanceId(instance.getId());
+        trackingMap.setInstanceNo(instance.getInstanceNo());
+        trackingMap.setTitle(instance.getTitle());
+
+        if (historicActivities == null || historicActivities.isEmpty()) {
+            trackingMap.setNodes(new ArrayList<>());
+            trackingMap.setEdges(new ArrayList<>());
+            return trackingMap;
+        }
+
+        Map<String, List<HistoricActivityInstance>> activitiesByNode = historicActivities.stream()
+                .filter(a -> !"sequenceFlow".equals(a.getActivityType()))
+                .collect(Collectors.groupingBy(HistoricActivityInstance::getActivityId, LinkedHashMap::new, Collectors.toList()));
+
+        Map<String, List<HistoricActivityInstance>> flowActivities = historicActivities.stream()
+                .filter(a -> "sequenceFlow".equals(a.getActivityType()))
+                .collect(Collectors.groupingBy(HistoricActivityInstance::getActivityId));
+
+        List<WfTrackingMapVO.TrackingNodeVO> nodes = new ArrayList<>();
+        List<WfTrackingMapVO.TrackingEdgeVO> edges = new ArrayList<>();
+        List<Long> allDurations = new ArrayList<>();
+
+        for (Map.Entry<String, List<HistoricActivityInstance>> entry : activitiesByNode.entrySet()) {
+            String nodeId = entry.getKey();
+            List<HistoricActivityInstance> nodeActivities = entry.getValue();
+
+            HistoricActivityInstance firstActivity = nodeActivities.get(0);
+            WfTrackingMapVO.TrackingNodeVO nodeVO = new WfTrackingMapVO.TrackingNodeVO();
+            nodeVO.setNodeId(nodeId);
+            nodeVO.setNodeName(firstActivity.getActivityName());
+            nodeVO.setNodeType(firstActivity.getActivityType());
+
+            String activityType = firstActivity.getActivityType();
+            if ("userTask".equals(activityType) || "multiInstanceBody".equals(activityType)) {
+                nodeVO.setNodeCategory(1);
+            } else if ("startEvent".equals(activityType)) {
+                nodeVO.setNodeCategory(2);
+            } else if ("endEvent".equals(activityType)) {
+                nodeVO.setNodeCategory(3);
+            } else if (activityType != null && activityType.contains("Gateway")) {
+                nodeVO.setNodeCategory(4);
+            } else if ("callActivity".equals(activityType)) {
+                nodeVO.setNodeCategory(5);
+            } else {
+                nodeVO.setNodeCategory(0);
+            }
+
+            HistoricActivityInstance lastActivity = nodeActivities.get(nodeActivities.size() - 1);
+            if (lastActivity.getEndTime() != null) {
+                nodeVO.setStatus("completed");
+                nodeVO.setStatusName("已完成");
+                nodeVO.setEndTime(lastActivity.getEndTime());
+            } else {
+                nodeVO.setStatus("active");
+                nodeVO.setStatusName("进行中");
+            }
+
+            if (firstActivity.getStartTime() != null) {
+                nodeVO.setStartTime(firstActivity.getStartTime());
+            }
+
+            if (firstActivity.getStartTime() != null && lastActivity.getEndTime() != null) {
+                long durationMs = java.time.Duration.between(firstActivity.getStartTime(), lastActivity.getEndTime()).toMillis();
+                nodeVO.setDuration(durationMs);
+                allDurations.add(durationMs);
+            }
+
+            List<WfTrackingMapVO.NodeOperatorVO> operators = new ArrayList<>();
+            for (HistoricActivityInstance activity : nodeActivities) {
+                WfTrackingMapVO.NodeOperatorVO operator = new WfTrackingMapVO.NodeOperatorVO();
+                if (activity.getAssignee() != null) {
+                    try {
+                        operator.setUserId(Long.parseLong(activity.getAssignee()));
+                        SysUser user = sysUserService.getById(operator.getUserId());
+                        if (user != null) {
+                            operator.setUserName(user.getRealName());
+                            operator.setUserAvatar(user.getAvatar());
+                        }
+                    } catch (NumberFormatException ignored) {}
+                }
+                operator.setOperateTime(activity.getStartTime());
+                if (activity.getEndTime() != null && activity.getStartTime() != null) {
+                    operator.setDuration(java.time.Duration.between(activity.getStartTime(), activity.getEndTime()).toMillis());
+                }
+                operators.add(operator);
+            }
+            nodeVO.setOperators(operators);
+
+            if (bpmnModel != null) {
+                FlowElement flowElement = bpmnModel.getProcesses().isEmpty() ? null
+                        : bpmnModel.getProcesses().get(0).getFlowElement(nodeId);
+                if (flowElement != null) {
+                    List<WfApprovalHistory> nodeHistory = approvalHistoryService.listValidByInstanceId(instance.getId());
+                    for (WfApprovalHistory h : nodeHistory) {
+                        if (nodeId.equals(h.getNodeId()) && h.getOperatorName() != null) {
+                            WfTrackingMapVO.NodeOperatorVO op = operators.stream()
+                                    .filter(o -> h.getOperatorId() != null && h.getOperatorId().equals(o.getUserId()))
+                                    .findFirst().orElse(null);
+                            if (op != null) {
+                                op.setAction(h.getActivityType() != null ? h.getActivityType().toString() : null);
+                                op.setActionRemark(h.getActionRemark());
+                            }
+                        }
+                    }
+                }
+            }
+
+            nodes.add(nodeVO);
+        }
+
+        double avgDuration = allDurations.stream().mapToLong(Long::longValue).average().orElse(0.0);
+        trackingMap.setAverageDuration(avgDuration);
+
+        for (WfTrackingMapVO.TrackingNodeVO node : nodes) {
+            if (node.getDuration() != null && avgDuration > 0) {
+                double deviation = (node.getDuration() - avgDuration) / avgDuration;
+                node.setDurationDeviation(deviation);
+                node.setIsBottleneck(deviation > 0.5);
+            } else {
+                node.setIsBottleneck(false);
+            }
+        }
+
+        if (bpmnModel != null && !bpmnModel.getProcesses().isEmpty()) {
+            Process process = bpmnModel.getProcesses().get(0);
+            for (FlowElement element : process.getFlowElements()) {
+                if (element instanceof SequenceFlow sequenceFlow) {
+                    WfTrackingMapVO.TrackingEdgeVO edge = new WfTrackingMapVO.TrackingEdgeVO();
+                    edge.setSourceId(sequenceFlow.getSourceRef());
+                    edge.setTargetId(sequenceFlow.getTargetRef());
+                    edge.setLabel(sequenceFlow.getName());
+                    edge.setIsActualPath(flowActivities.containsKey(sequenceFlow.getId()));
+                    edges.add(edge);
+                }
+            }
+        }
+
+        trackingMap.setNodes(nodes);
+        trackingMap.setEdges(edges);
+
+        return trackingMap;
     }
 }
