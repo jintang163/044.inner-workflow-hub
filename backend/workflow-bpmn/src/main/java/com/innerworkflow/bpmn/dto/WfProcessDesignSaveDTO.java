@@ -82,6 +82,12 @@ public class WfProcessDesignSaveDTO implements Serializable {
 
         private String refuseTargetNodeId;
 
+        private Integer multiInstanceCompletionType;
+
+        private Integer passPercentage;
+
+        private Integer vetoEnabled;
+
         private Integer canAddSign;
 
         private Integer canTransfer;

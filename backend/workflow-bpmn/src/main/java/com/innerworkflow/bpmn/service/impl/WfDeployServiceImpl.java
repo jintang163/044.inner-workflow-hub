@@ -11,6 +11,7 @@ import com.innerworkflow.bpmn.service.*;
 import com.innerworkflow.bpmn.vo.WfProcessDesignVO;
 import com.innerworkflow.common.enums.ApproveTypeEnum;
 import com.innerworkflow.common.enums.AssigneeTypeEnum;
+import com.innerworkflow.common.enums.MultiInstanceCompletionTypeEnum;
 import com.innerworkflow.common.enums.ResultCode;
 import com.innerworkflow.common.exception.BusinessException;
 import com.innerworkflow.common.util.SecurityUtils;
@@ -136,6 +137,9 @@ public class WfDeployServiceImpl implements WfDeployService {
                 nodeConfig.setEmptyAssigneeStrategy(dto.getEmptyAssigneeStrategy());
                 nodeConfig.setRefuseStrategy(dto.getRefuseStrategy());
                 nodeConfig.setRefuseTargetNodeId(dto.getRefuseTargetNodeId());
+                nodeConfig.setMultiInstanceCompletionType(dto.getMultiInstanceCompletionType());
+                nodeConfig.setPassPercentage(dto.getPassPercentage());
+                nodeConfig.setVetoEnabled(dto.getVetoEnabled());
                 nodeConfig.setCanAddSign(dto.getCanAddSign());
                 nodeConfig.setCanTransfer(dto.getCanTransfer());
                 nodeConfig.setCanDelegate(dto.getCanDelegate());
@@ -388,19 +392,57 @@ public class WfDeployServiceImpl implements WfDeployService {
         multiInstanceLoop.setElementVariable("assignee");
         multiInstanceLoop.setElementIndexVariable("loopCounter");
 
-        if (approveType != null) {
-            if (approveType.equals(ApproveTypeEnum.ALL_SIGN.getCode())) {
-                multiInstanceLoop.setCompletionCondition("${nrOfCompletedInstances == nrOfInstances}");
-            } else if (approveType.equals(ApproveTypeEnum.OR_SIGN.getCode())) {
-                multiInstanceLoop.setCompletionCondition("${nrOfCompletedInstances > 0}");
-            } else if (approveType.equals(ApproveTypeEnum.SEQUENTIAL.getCode())) {
-                multiInstanceLoop.setSequential(true);
-                multiInstanceLoop.setCompletionCondition("${nrOfCompletedInstances == nrOfInstances}");
-            }
+        Integer completionType = nodeConfig.getMultiInstanceCompletionType();
+        Integer passPercentage = nodeConfig.getPassPercentage();
+        Integer vetoEnabled = nodeConfig.getVetoEnabled();
+
+        String completionCondition = buildCompletionCondition(approveType, completionType, passPercentage, vetoEnabled);
+        if (completionCondition != null) {
+            multiInstanceLoop.setCompletionCondition(completionCondition);
+        }
+
+        if (approveType != null && approveType.equals(ApproveTypeEnum.SEQUENTIAL.getCode())) {
+            multiInstanceLoop.setSequential(true);
         }
 
         userTask.setAssignee("${assignee}");
         userTask.setLoopCharacteristics(multiInstanceLoop);
+    }
+
+    private String buildCompletionCondition(Integer approveType, Integer completionType,
+                                            Integer passPercentage, Integer vetoEnabled) {
+        StringBuilder condition = new StringBuilder();
+
+        if (vetoEnabled != null && vetoEnabled == 1) {
+            condition.append("(${signRejectCount == 0}) && (");
+        }
+
+        if (completionType != null) {
+            if (completionType.equals(MultiInstanceCompletionTypeEnum.ALL_PASS.getCode())) {
+                condition.append("nrOfCompletedInstances == nrOfInstances");
+            } else if (completionType.equals(MultiInstanceCompletionTypeEnum.ANY_PASS.getCode())) {
+                condition.append("nrOfCompletedInstances > 0");
+            } else if (completionType.equals(MultiInstanceCompletionTypeEnum.PERCENTAGE_PASS.getCode())) {
+                int percentage = (passPercentage != null && passPercentage > 0) ? passPercentage : 100;
+                condition.append("(nrOfCompletedInstances * 100 / nrOfInstances) >= ").append(percentage);
+            }
+        } else {
+            if (approveType != null) {
+                if (approveType.equals(ApproveTypeEnum.ALL_SIGN.getCode())) {
+                    condition.append("nrOfCompletedInstances == nrOfInstances");
+                } else if (approveType.equals(ApproveTypeEnum.OR_SIGN.getCode())) {
+                    condition.append("nrOfCompletedInstances > 0");
+                } else if (approveType.equals(ApproveTypeEnum.SEQUENTIAL.getCode())) {
+                    condition.append("nrOfCompletedInstances == nrOfInstances");
+                }
+            }
+        }
+
+        if (vetoEnabled != null && vetoEnabled == 1) {
+            condition.append(")");
+        }
+
+        return condition.length() > 0 ? "${" + condition + "}" : null;
     }
 
     private void enhanceSequenceFlow(SequenceFlow sequenceFlow, WfSequenceFlowConfig flowConfig) {

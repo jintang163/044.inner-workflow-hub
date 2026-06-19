@@ -697,6 +697,13 @@ public class WfApprovalServiceImpl implements WfApprovalService {
             }
         }
 
+        try {
+            List<WfMultiInstanceSignVO> multiInstanceSignList = buildMultiInstanceSignList(instance);
+            detailVO.setMultiInstanceSignList(multiInstanceSignList);
+        } catch (Exception e) {
+            log.error("构建会签节点状态失败, instanceId={}, error={}", instanceId, e.getMessage(), e);
+        }
+
         List<WfProcessInstanceRelationVO> childProcessList = processInstanceRelationService.listByParentInstanceId(instanceId);
         detailVO.setChildProcessInstanceList(childProcessList);
 
@@ -1643,5 +1650,146 @@ public class WfApprovalServiceImpl implements WfApprovalService {
         }
 
         return nodeIds;
+    }
+
+    private List<WfMultiInstanceSignVO> buildMultiInstanceSignList(WfProcessInstance instance) {
+        List<WfMultiInstanceSignVO> result = new ArrayList<>();
+
+        List<WfApprovalTask> allTasks = approvalTaskService.listByInstanceId(instance.getId());
+        if (allTasks == null || allTasks.isEmpty()) {
+            return result;
+        }
+
+        Map<String, List<WfApprovalTask>> tasksByNode = allTasks.stream()
+                .filter(t -> t.getNodeId() != null)
+                .collect(Collectors.groupingBy(WfApprovalTask::getNodeId));
+
+        for (Map.Entry<String, List<WfApprovalTask>> entry : tasksByNode.entrySet()) {
+            String nodeId = entry.getKey();
+            List<WfApprovalTask> nodeTasks = entry.getValue();
+
+            boolean hasMultiInstance = nodeTasks.stream()
+                    .anyMatch(t -> t.getMultiInstanceFlag() != null && t.getMultiInstanceFlag() == 1);
+
+            if (!hasMultiInstance && nodeTasks.size() <= 1) {
+                continue;
+            }
+
+            WfNodeConfig nodeConfig = nodeConfigService.getByNodeId(instance.getProcessVersionId(), nodeId);
+            if (nodeConfig == null || (nodeConfig.getMultiInstance() == null || nodeConfig.getMultiInstance() != 1)) {
+                if (nodeTasks.size() <= 1) {
+                    continue;
+                }
+            }
+
+            WfMultiInstanceSignVO signVO = buildMultiInstanceSignVO(nodeId, nodeTasks, nodeConfig);
+            if (signVO != null) {
+                result.add(signVO);
+            }
+        }
+
+        return result;
+    }
+
+    private WfMultiInstanceSignVO buildMultiInstanceSignVO(String nodeId,
+                                                           List<WfApprovalTask> nodeTasks,
+                                                           WfNodeConfig nodeConfig) {
+        WfMultiInstanceSignVO signVO = new WfMultiInstanceSignVO();
+        signVO.setNodeId(nodeId);
+
+        WfApprovalTask sampleTask = nodeTasks.get(0);
+        signVO.setNodeName(sampleTask.getNodeName());
+
+        if (nodeConfig != null) {
+            signVO.setApproveType(nodeConfig.getApproveType());
+            ApproveTypeEnum approveTypeEnum = ApproveTypeEnum.getByCode(nodeConfig.getApproveType());
+            if (approveTypeEnum != null) {
+                signVO.setApproveTypeName(approveTypeEnum.getDesc());
+            }
+
+            signVO.setCompletionType(nodeConfig.getMultiInstanceCompletionType());
+            MultiInstanceCompletionTypeEnum completionTypeEnum =
+                    MultiInstanceCompletionTypeEnum.getByCode(nodeConfig.getMultiInstanceCompletionType());
+            if (completionTypeEnum != null) {
+                signVO.setCompletionTypeName(completionTypeEnum.getDesc());
+            }
+
+            signVO.setPassPercentage(nodeConfig.getPassPercentage());
+            signVO.setVetoEnabled(nodeConfig.getVetoEnabled() != null && nodeConfig.getVetoEnabled() == 1);
+        } else if (sampleTask.getApproveType() != null) {
+            signVO.setApproveType(sampleTask.getApproveType());
+            ApproveTypeEnum approveTypeEnum = ApproveTypeEnum.getByCode(sampleTask.getApproveType());
+            if (approveTypeEnum != null) {
+                signVO.setApproveTypeName(approveTypeEnum.getDesc());
+            }
+        }
+
+        List<WfMultiInstanceSignVO.SignerStatusVO> signers = new ArrayList<>();
+        int approvedCount = 0;
+        int rejectedCount = 0;
+        int pendingCount = 0;
+
+        for (WfApprovalTask task : nodeTasks) {
+            WfMultiInstanceSignVO.SignerStatusVO signer = buildSignerStatusVO(task);
+            signers.add(signer);
+
+            if (MultiInstanceSignStatusEnum.APPROVED.getCode().equals(signer.getSignStatus())) {
+                approvedCount++;
+            } else if (MultiInstanceSignStatusEnum.REJECTED.getCode().equals(signer.getSignStatus())) {
+                rejectedCount++;
+            } else {
+                pendingCount++;
+            }
+        }
+
+        signVO.setSigners(signers);
+        signVO.setTotalSigners(signers.size());
+        signVO.setApprovedCount(approvedCount);
+        signVO.setRejectedCount(rejectedCount);
+        signVO.setPendingCount(pendingCount);
+        signVO.setProgressText(approvedCount + "/" + signers.size() + " 已通过");
+
+        return signVO;
+    }
+
+    private WfMultiInstanceSignVO.SignerStatusVO buildSignerStatusVO(WfApprovalTask task) {
+        WfMultiInstanceSignVO.SignerStatusVO signer = new WfMultiInstanceSignVO.SignerStatusVO();
+        signer.setUserId(task.getAssigneeId());
+        signer.setAssignTime(task.getAssignTime());
+        signer.setHandleTime(task.getActionTime());
+        signer.setDuration(task.getActionDuration());
+        signer.setComment(task.getActionRemark());
+        signer.setSignatureUrl(task.getSignatureUrl());
+        signer.setAttachmentIds(task.getAttachmentIds());
+
+        if (task.getAssigneeId() != null) {
+            SysUser user = sysUserService.getById(task.getAssigneeId());
+            if (user != null) {
+                signer.setUserName(user.getRealName());
+                signer.setUserAvatar(user.getAvatar());
+                if (user.getDeptId() != null) {
+                    signer.setDeptName(user.getDeptId().toString());
+                }
+            }
+        }
+
+        Integer taskStatus = task.getTaskStatus();
+        Integer action = task.getAction();
+
+        if (TaskStatusEnum.PENDING.getCode().equals(taskStatus)) {
+            signer.setSignStatus(MultiInstanceSignStatusEnum.PENDING.getCode());
+            signer.setSignStatusName(MultiInstanceSignStatusEnum.PENDING.getDesc());
+        } else if (TaskActionEnum.AGREE.getCode().equals(action)) {
+            signer.setSignStatus(MultiInstanceSignStatusEnum.APPROVED.getCode());
+            signer.setSignStatusName(MultiInstanceSignStatusEnum.APPROVED.getDesc());
+        } else if (TaskActionEnum.REJECT.getCode().equals(action)) {
+            signer.setSignStatus(MultiInstanceSignStatusEnum.REJECTED.getCode());
+            signer.setSignStatusName(MultiInstanceSignStatusEnum.REJECTED.getDesc());
+        } else {
+            signer.setSignStatus(MultiInstanceSignStatusEnum.PENDING.getCode());
+            signer.setSignStatusName(MultiInstanceSignStatusEnum.PENDING.getDesc());
+        }
+
+        return signer;
     }
 }

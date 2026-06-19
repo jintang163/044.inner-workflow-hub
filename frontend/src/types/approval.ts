@@ -99,6 +99,7 @@ export interface ProcessInstanceVO {
   currentNodeIds: string[]
   currentNodeNames?: string[]
   canWithdraw?: boolean
+  multiInstanceSignList?: MultiInstanceSignVO[]
 }
 
 export interface ProcessCategoryVO {
@@ -242,4 +243,38 @@ export interface TransferRecordVO {
   delegationId?: number
   title?: string
   createTime: string
+}
+
+export type SignerStatus = 0 | 1 | 2
+
+export interface SignerStatusVO {
+  userId: number
+  userName: string
+  userAvatar?: string
+  deptName?: string
+  signStatus: SignerStatus
+  signStatusName: string
+  comment?: string
+  signatureUrl?: string
+  attachmentIds?: number[]
+  assignTime?: string
+  handleTime?: string
+  duration?: number
+}
+
+export interface MultiInstanceSignVO {
+  nodeId: string
+  nodeName: string
+  approveType?: number
+  approveTypeName?: string
+  completionType?: number
+  completionTypeName?: string
+  passPercentage?: number
+  vetoEnabled?: boolean
+  totalSigners: number
+  approvedCount: number
+  rejectedCount: number
+  pendingCount: number
+  progressText: string
+  signers: SignerStatusVO[]
 }

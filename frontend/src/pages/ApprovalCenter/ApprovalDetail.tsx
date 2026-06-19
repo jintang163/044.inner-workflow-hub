@@ -33,9 +33,10 @@ import {
 import ApprovalTimeline from './components/ApprovalTimeline'
 import FlowDiagram from './components/FlowDiagram'
 import ApprovalActionBar from './components/ApprovalActionBar'
+import MultiInstanceSignCard from './components/MultiInstanceSignCard'
 import AiRecommendationCard from '@/components/business/AiRecommendationCard'
 import { approvalApi, formApi, aiApi } from '@/api'
-import type { ProcessInstanceVO, ApprovalHistoryVO, ApprovalTaskVO } from '@/types/approval'
+import type { ProcessInstanceVO, ApprovalHistoryVO, ApprovalTaskVO, MultiInstanceSignVO } from '@/types/approval'
 import type { FormilySchema } from '@/types/form'
 import type { AiRecommendationVO } from '@/types/ai'
 import FormRenderer from '@/components/FormRenderer'
@@ -96,6 +97,7 @@ const ApprovalDetail: React.FC = () => {
   const [aiRecommendation, setAiRecommendation] = useState<AiRecommendationVO | null>(null)
   const [formSchema, setFormSchema] = useState<FormilySchema | null>(null)
   const [schemaLoading, setSchemaLoading] = useState(false)
+  const [multiInstanceSignList, setMultiInstanceSignList] = useState<MultiInstanceSignVO[]>([])
 
   const instanceNo = id || ''
 
@@ -111,6 +113,7 @@ const ApprovalDetail: React.FC = () => {
       ])
       setInstance(instRes)
       setHistory(histRes)
+      setMultiInstanceSignList(instRes?.multiInstanceSignList || [])
 
       if (passedTask) {
         setCurrentTask(passedTask)
@@ -532,6 +535,15 @@ const ApprovalDetail: React.FC = () => {
                       </Space>
                     )
                   },
+                  ...(multiInstanceSignList.length > 0 ? [{
+                    key: 'sign',
+                    label: (
+                      <Space size={4}>
+                        <span>👥</span>
+                        <span>会签/或签</span>
+                      </Space>
+                    )
+                  }] : []),
                   {
                     key: 'flow',
                     label: (
@@ -547,6 +559,13 @@ const ApprovalDetail: React.FC = () => {
               <div style={{ padding: '0 24px 24px' }}>
                 {activeTab === 'form' && (
                   instance ? renderFormContent() : <Empty description="暂无表单数据" />
+                )}
+                {activeTab === 'sign' && multiInstanceSignList.length > 0 && (
+                  <Space direction="vertical" size={0} style={{ width: '100%' }}>
+                    {multiInstanceSignList.map((signData, index) => (
+                      <MultiInstanceSignCard key={signData.nodeId || index} signData={signData} />
+                    ))}
+                  </Space>
                 )}
                 {activeTab === 'flow' && (
                   <FlowDiagram
