@@ -19,5 +19,9 @@ public class WfTransferDTO implements Serializable {
     @NotNull(message = "转审人ID不能为空")
     private Long targetUserId;
 
+    private String targetUserName;
+
     private String actionRemark;
+
+    private Integer transferType;
 }

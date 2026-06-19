@@ -12,6 +12,7 @@ import com.innerworkflow.bpmn.entity.WfProcessVersion;
 import com.innerworkflow.bpmn.service.WfNodeConfigService;
 import com.innerworkflow.bpmn.service.WfProcessDefinitionService;
 import com.innerworkflow.bpmn.service.WfProcessVersionService;
+import com.innerworkflow.common.dto.LoginUserDTO;
 import com.innerworkflow.common.enums.*;
 import com.innerworkflow.common.exception.BusinessException;
 import com.innerworkflow.common.util.JsonUtils;
@@ -328,7 +329,7 @@ public class WfApprovalServiceImpl implements WfApprovalService {
         transferRecordService.createTransferRecord(
                 approvalTask.getInstanceId(),
                 approvalTask.getId(),
-                TransferTypeEnum.MANUAL.getCode(),
+                dto.getTransferType() != null ? dto.getTransferType() : TransferTypeEnum.MANUAL.getCode(),
                 userId,
                 SecurityUtils.getCurrentRealName(),
                 dto.getTargetUserId(),
@@ -608,22 +609,8 @@ public class WfApprovalServiceImpl implements WfApprovalService {
                 transferDTO.setTargetUserId(dto.getTargetUserId());
                 transferDTO.setTargetUserName(targetUserName);
                 transferDTO.setActionRemark(dto.getActionRemark());
+                transferDTO.setTransferType(TransferTypeEnum.BATCH.getCode());
                 transfer(transferDTO);
-
-                WfApprovalTask approvalTask = approvalTaskService.getByFlowableTaskId(taskId);
-                if (approvalTask != null) {
-                    transferRecordService.createTransferRecord(
-                            approvalTask.getInstanceId(),
-                            approvalTask.getId(),
-                            TransferTypeEnum.BATCH.getCode(),
-                            userId,
-                            SecurityUtils.getCurrentRealName(),
-                            dto.getTargetUserId(),
-                            targetUserName,
-                            dto.getActionRemark(),
-                            null
-                    );
-                }
 
                 successCount++;
             } catch (Exception e) {
@@ -1106,6 +1093,134 @@ public class WfApprovalServiceImpl implements WfApprovalService {
             notifyService.sendNotify(sendDTO);
         } catch (Exception e) {
             log.warn("发送转审通知失败, taskId={}, error={}", approvalTask.getId(), e.getMessage());
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void transferExistingTasksForDelegation(Long delegationId) {
+        WfDelegation delegation = delegationService.getById(delegationId);
+        if (delegation == null) {
+            log.warn("委托不存在, delegationId={}", delegationId);
+            return;
+        }
+        if (!DelegationStatusEnum.ACTIVE.getCode().equals(delegation.getDelegationStatus())) {
+            log.warn("委托未生效, delegationId={}, status={}", delegationId, delegation.getDelegationStatus());
+            return;
+        }
+
+        LoginUserDTO originUser = SecurityUtils.getCurrentUserOpt().orElse(null);
+        try {
+            LoginUserDTO delegatorUser = LoginUserDTO.builder()
+                    .userId(delegation.getDelegatorId())
+                    .realName(delegation.getDelegatorName())
+                    .tenantId(delegation.getTenantId())
+                    .build();
+            SecurityUtils.setCurrentUser(delegatorUser);
+
+            List<WfApprovalTask> todoTasks = approvalTaskService.listTodoByUserId(delegation.getDelegatorId());
+            if (todoTasks == null || todoTasks.isEmpty()) {
+                log.info("委托人没有待办任务, delegatorId={}", delegation.getDelegatorId());
+                return;
+            }
+
+            String processKeys = delegation.getProcessKeys();
+            List<String> processKeyList = StrUtil.isNotBlank(processKeys)
+                    ? Arrays.asList(processKeys.split(","))
+                    : null;
+
+            int successCount = 0;
+            for (WfApprovalTask todoTask : todoTasks) {
+                try {
+                    if (processKeyList != null && !processKeyList.contains(todoTask.getProcessKey())) {
+                        continue;
+                    }
+
+                    Task flowableTask = taskService.createTaskQuery()
+                            .taskId(todoTask.getFlowableTaskId())
+                            .singleResult();
+                    if (flowableTask == null) {
+                        continue;
+                    }
+
+                    handleDelegationForTask(todoTask, flowableTask);
+                    successCount++;
+                } catch (Exception e) {
+                    log.error("委托转移任务失败, taskId={}, error={}", todoTask.getId(), e.getMessage(), e);
+                }
+            }
+
+            log.info("委托生效转移现有待办完成, delegationId={}, 共{}个任务, 成功{}个",
+                    delegationId, todoTasks.size(), successCount);
+        } finally {
+            if (originUser != null) {
+                SecurityUtils.setCurrentUser(originUser);
+            } else {
+                SecurityUtils.clearCurrentUser();
+            }
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void transferBackTasksForDelegation(Long delegationId) {
+        WfDelegation delegation = delegationService.getById(delegationId);
+        if (delegation == null) {
+            log.warn("委托不存在, delegationId={}", delegationId);
+            return;
+        }
+
+        List<WfTransferRecord> transferRecords = transferRecordService.listByDelegationId(delegationId);
+        if (transferRecords == null || transferRecords.isEmpty()) {
+            log.info("该委托未转移过任务, delegationId={}", delegationId);
+            return;
+        }
+
+        LoginUserDTO originUser = SecurityUtils.getCurrentUserOpt().orElse(null);
+        try {
+            LoginUserDTO delegateeUser = LoginUserDTO.builder()
+                    .userId(delegation.getDelegateeId())
+                    .realName(delegation.getDelegateeName())
+                    .tenantId(delegation.getTenantId())
+                    .build();
+            SecurityUtils.setCurrentUser(delegateeUser);
+
+            String reason = "委托到期/撤销，任务转回原处理人";
+            int successCount = 0;
+            for (WfTransferRecord record : transferRecords) {
+                try {
+                    WfApprovalTask delegateeTask = approvalTaskService.getById(record.getTaskId());
+                    if (delegateeTask == null) {
+                        continue;
+                    }
+                    if (!TaskStatusEnum.PENDING.getCode().equals(delegateeTask.getTaskStatus())) {
+                        continue;
+                    }
+                    if (!delegation.getDelegateeId().equals(delegateeTask.getAssigneeId())) {
+                        continue;
+                    }
+
+                    WfTransferDTO transferDTO = new WfTransferDTO();
+                    transferDTO.setTaskId(delegateeTask.getFlowableTaskId());
+                    transferDTO.setTargetUserId(delegation.getDelegatorId());
+                    transferDTO.setTargetUserName(delegation.getDelegatorName());
+                    transferDTO.setActionRemark(reason);
+                    transfer(transferDTO);
+
+                    successCount++;
+                } catch (Exception e) {
+                    log.error("委托到期转回任务失败, recordId={}, error={}", record.getId(), e.getMessage(), e);
+                }
+            }
+
+            log.info("委托到期/撤销转回任务完成, delegationId={}, 共{}条记录, 成功{}个",
+                    delegationId, transferRecords.size(), successCount);
+        } finally {
+            if (originUser != null) {
+                SecurityUtils.setCurrentUser(originUser);
+            } else {
+                SecurityUtils.clearCurrentUser();
+            }
         }
     }
 

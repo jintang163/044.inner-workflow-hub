@@ -25,4 +25,6 @@ public interface WfTransferRecordService {
                               Long sourceUserId, String sourceUserName,
                               Long targetUserId, String targetUserName,
                               String transferReason, Long delegationId);
+
+    List<WfTransferRecord> listByDelegationId(Long delegationId);
 }

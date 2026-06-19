@@ -41,6 +41,7 @@ public class WfDelegationServiceImpl extends ServiceImpl<WfDelegationMapper, WfD
     private final SysUserService sysUserService;
     private final WfNotifyService notifyService;
     private final WfTransferRecordService transferRecordService;
+    private final WfApprovalService approvalService;
 
     @Override
     public IPage<WfDelegationVO> page(WfDelegationQueryDTO queryDTO) {
@@ -122,6 +123,7 @@ public class WfDelegationServiceImpl extends ServiceImpl<WfDelegationMapper, WfD
 
         if (DelegationStatusEnum.ACTIVE.getCode().equals(delegation.getDelegationStatus())) {
             sendDelegationStartNotify(delegation);
+            approvalService.transferExistingTasksForDelegation(delegation.getId());
         }
 
         log.info("创建委托成功, delegatorId={}, delegateeId={}, startTime={}, endTime={}",
@@ -184,6 +186,7 @@ public class WfDelegationServiceImpl extends ServiceImpl<WfDelegationMapper, WfD
         if (!DelegationStatusEnum.ACTIVE.getCode().equals(oldStatus)
                 && DelegationStatusEnum.ACTIVE.getCode().equals(delegation.getDelegationStatus())) {
             sendDelegationStartNotify(delegation);
+            approvalService.transferExistingTasksForDelegation(delegation.getId());
         }
 
         log.info("更新委托成功, id={}, delegatorId={}, delegateeId={}", dto.getId(), userId, dto.getDelegateeId());
@@ -209,6 +212,8 @@ public class WfDelegationServiceImpl extends ServiceImpl<WfDelegationMapper, WfD
 
         delegation.setDelegationStatus(DelegationStatusEnum.REVOKED.getCode());
         this.updateById(delegation);
+
+        approvalService.transferBackTasksForDelegation(id);
 
         log.info("撤销委托成功, id={}, delegatorId={}", id, userId);
     }
@@ -254,6 +259,7 @@ public class WfDelegationServiceImpl extends ServiceImpl<WfDelegationMapper, WfD
                 delegation.setDelegationStatus(DelegationStatusEnum.ACTIVE.getCode());
                 this.updateById(delegation);
                 sendDelegationStartNotify(delegation);
+                approvalService.transferExistingTasksForDelegation(delegation.getId());
                 log.info("委托自动生效, id={}, delegatorId={}, delegateeId={}",
                         delegation.getId(), delegation.getDelegatorId(), delegation.getDelegateeId());
             } catch (Exception e) {
@@ -267,6 +273,7 @@ public class WfDelegationServiceImpl extends ServiceImpl<WfDelegationMapper, WfD
                 delegation.setDelegationStatus(DelegationStatusEnum.EXPIRED.getCode());
                 this.updateById(delegation);
                 sendDelegationEndNotify(delegation);
+                approvalService.transferBackTasksForDelegation(delegation.getId());
                 log.info("委托自动过期, id={}, delegatorId={}, delegateeId={}",
                         delegation.getId(), delegation.getDelegatorId(), delegation.getDelegateeId());
             } catch (Exception e) {

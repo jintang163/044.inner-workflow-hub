@@ -25,6 +25,10 @@ public interface WfApprovalService {
 
     void batchTransfer(WfBatchTransferDTO dto);
 
+    void transferExistingTasksForDelegation(Long delegationId);
+
+    void transferBackTasksForDelegation(Long delegationId);
+
     WfProcessDetailVO getProcessDetail(Long instanceId);
 
     String getProcessDiagram(Long instanceId);

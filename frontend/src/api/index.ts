@@ -196,7 +196,11 @@ export const approvalApi = {
   delegationRevoke: (id: number) =>
     request<void>({ url: `/api/approval/delegation/${id}/revoke`, method: 'put' }),
   hasActiveDelegation: () =>
-    request<boolean>({ url: '/api/approval/delegation/active/current', method: 'get' })
+    request<boolean>({ url: '/api/approval/delegation/active/current', method: 'get' }),
+  transferRecordPage: (params?: { pageNum?: number; pageSize?: number; transferType?: number }) =>
+    request<PageResult<TransferRecordVO>>({ url: '/api/approval/transfer-record/page', method: 'get', params }),
+  transferRecordByInstance: (instanceId: number) =>
+    request<TransferRecordVO[]>({ url: `/api/approval/transfer-record/instance/${instanceId}`, method: 'get' })
 }
 
 export const notifyApi = {

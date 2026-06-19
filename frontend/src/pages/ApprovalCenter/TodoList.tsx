@@ -31,6 +31,7 @@ const TodoList: React.FC = () => {
   const [filterValues, setFilterValues] = useState<FilterValues>({})
   const [keyword, setKeyword] = useState<string | undefined>(undefined)
   const [transferModalVisible, setTransferModalVisible] = useState(false)
+  const [transferAll, setTransferAll] = useState(false)
   const [transferForm] = Form.useForm()
 
   const fetchData = useCallback(async (pageNum = 1, pageSize = 10, filters?: FilterValues) => {
@@ -171,6 +172,13 @@ const TodoList: React.FC = () => {
   }
 
   const handleTransferAll = () => {
+    setTransferAll(true)
+    transferForm.resetFields()
+    setTransferModalVisible(true)
+  }
+
+  const handleTransferSelected = () => {
+    setTransferAll(false)
     transferForm.resetFields()
     setTransferModalVisible(true)
   }
@@ -181,14 +189,16 @@ const TodoList: React.FC = () => {
       setActionLoading(true)
 
       const transferData: BatchTransferDTO = {
-        taskIds: selectedRows.map(r => r.flowableTaskId),
+        taskIds: transferAll ? undefined : selectedRows.map(r => r.flowableTaskId),
+        transferAll: transferAll,
         targetUserId: values.targetUserId,
         targetUserName: '',
         actionRemark: values.actionRemark
       }
 
       await approvalApi.batchTransfer(transferData)
-      message.success(`批量转审 ${selectedRows.length} 条任务成功`)
+      const successMsg = transferAll ? '一键转全部待办成功' : `批量转审 ${selectedRows.length} 条任务成功`
+      message.success(successMsg)
       setTransferModalVisible(false)
       setSelectedRowKeys([])
       setSelectedRows([])
@@ -236,12 +246,17 @@ const TodoList: React.FC = () => {
               批量审批（{selectedRowKeys.length}）
             </Button>
             <Button
-              type={selectedRowKeys.length > 0 ? 'default' : 'default'}
               disabled={selectedRowKeys.length === 0}
+              icon={<SwapOutlined />}
+              onClick={handleTransferSelected}
+            >
+              批量转审
+            </Button>
+            <Button
               icon={<SwapOutlined />}
               onClick={handleTransferAll}
             >
-              批量转审
+              一键转全部待办
             </Button>
             <Button
               icon={<ReloadOutlined />}
@@ -282,7 +297,7 @@ const TodoList: React.FC = () => {
       />
 
       <Modal
-        title={`批量转审（${selectedRows.length} 条任务）`}
+        title={transferAll ? '一键转全部待办' : `批量转审（${selectedRows.length} 条任务）`}
         open={transferModalVisible}
         onOk={handleBatchTransfer}
         onCancel={() => setTransferModalVisible(false)}

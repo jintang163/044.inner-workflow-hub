@@ -60,6 +60,15 @@ public class WfTransferRecordServiceImpl extends ServiceImpl<WfTransferRecordMap
     }
 
     @Override
+    public List<WfTransferRecord> listByDelegationId(Long delegationId) {
+        LambdaQueryWrapper<WfTransferRecord> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(WfTransferRecord::getDelegationId, delegationId);
+        wrapper.eq(WfTransferRecord::getTransferType, TransferTypeEnum.DELEGATION.getCode());
+        wrapper.orderByDesc(WfTransferRecord::getCreateTime);
+        return this.list(wrapper);
+    }
+
+    @Override
     public List<WfTransferRecordVO> listVOByInstanceId(Long instanceId) {
         LambdaQueryWrapper<WfTransferRecord> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(WfTransferRecord::getInstanceId, instanceId);

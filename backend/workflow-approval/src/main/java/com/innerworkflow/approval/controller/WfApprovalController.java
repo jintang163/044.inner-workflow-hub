@@ -1,13 +1,20 @@
 package com.innerworkflow.approval.controller;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.innerworkflow.approval.dto.*;
 import com.innerworkflow.approval.service.WfApprovalService;
+import com.innerworkflow.approval.service.WfTransferRecordService;
+import com.innerworkflow.approval.vo.WfTransferRecordVO;
+import com.innerworkflow.common.dto.PageQuery;
 import com.innerworkflow.common.result.R;
+import com.innerworkflow.common.util.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @Tag(name = "审批操作", description = "审批操作相关接口")
 @RestController
@@ -16,6 +23,7 @@ import org.springframework.web.bind.annotation.*;
 public class WfApprovalController {
 
     private final WfApprovalService approvalService;
+    private final WfTransferRecordService transferRecordService;
 
     @Operation(summary = "发起审批")
     @PostMapping("/start")
@@ -85,5 +93,21 @@ public class WfApprovalController {
     public R<Void> batchTransfer(@Valid @RequestBody WfBatchTransferDTO dto) {
         approvalService.batchTransfer(dto);
         return R.success();
+    }
+
+    @Operation(summary = "转审记录分页查询")
+    @GetMapping("/transfer-record/page")
+    public R<IPage<WfTransferRecordVO>> transferRecordPage(PageQuery queryDTO,
+                                                            @RequestParam(required = false) Integer transferType) {
+        Long userId = SecurityUtils.getCurrentUserId();
+        IPage<WfTransferRecordVO> page = transferRecordService.page(queryDTO, userId, transferType);
+        return R.success(page);
+    }
+
+    @Operation(summary = "根据实例ID查询转审记录")
+    @GetMapping("/transfer-record/instance/{instanceId}")
+    public R<List<WfTransferRecordVO>> listTransferRecordByInstanceId(@PathVariable Long instanceId) {
+        List<WfTransferRecordVO> list = transferRecordService.listVOByInstanceId(instanceId);
+        return R.success(list);
     }
 }
