@@ -14,6 +14,8 @@ import cn.hutool.core.util.StrUtil;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
+
 @Service
 public class WfProcessInstanceServiceImpl extends ServiceImpl<WfProcessInstanceMapper, WfProcessInstance> implements WfProcessInstanceService {
 
@@ -73,5 +75,13 @@ public class WfProcessInstanceServiceImpl extends ServiceImpl<WfProcessInstanceM
             vo.setInstanceStatusName(statusEnum.getDesc());
         }
         return vo;
+    }
+
+    @Override
+    public List<WfProcessInstance> listByProcessKey(String processKey) {
+        LambdaQueryWrapper<WfProcessInstance> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(WfProcessInstance::getProcessKey, processKey);
+        wrapper.orderByDesc(WfProcessInstance::getCreateTime);
+        return this.list(wrapper);
     }
 }

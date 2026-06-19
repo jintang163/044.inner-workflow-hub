@@ -299,6 +299,7 @@ export interface TrackingNodeVO {
   status: string
   statusName: string
   duration?: number
+  historicalAvgDuration?: number
   durationDeviation?: number
   isBottleneck?: boolean
   operators: TrackingNodeOperatorVO[]
@@ -306,13 +307,13 @@ export interface TrackingNodeVO {
   endTime?: string
   actionRemark?: string
   signatureUrl?: string
+  actionName?: string
 }
 
 export interface TrackingEdgeVO {
   sourceId: string
   targetId: string
   label?: string
-  isActualPath?: boolean
 }
 
 export interface TrackingMapVO {
@@ -320,6 +321,7 @@ export interface TrackingMapVO {
   instanceNo: string
   title: string
   averageDuration?: number
+  historicalInstanceCount?: number
   nodes: TrackingNodeVO[]
   edges: TrackingEdgeVO[]
 }

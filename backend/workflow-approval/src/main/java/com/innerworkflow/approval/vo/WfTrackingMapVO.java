@@ -22,6 +22,8 @@ public class WfTrackingMapVO implements Serializable {
 
     private Double averageDuration;
 
+    private Long historicalInstanceCount;
+
     private List<TrackingNodeVO> nodes;
 
     private List<TrackingEdgeVO> edges;
@@ -46,6 +48,8 @@ public class WfTrackingMapVO implements Serializable {
 
         private Long duration;
 
+        private Double historicalAvgDuration;
+
         private Double durationDeviation;
 
         private Boolean isBottleneck;
@@ -61,6 +65,8 @@ public class WfTrackingMapVO implements Serializable {
         private String actionRemark;
 
         private String signatureUrl;
+
+        private String actionName;
     }
 
     @Data
@@ -100,7 +106,5 @@ public class WfTrackingMapVO implements Serializable {
         private String targetId;
 
         private String label;
-
-        private Boolean isActualPath;
     }
 }

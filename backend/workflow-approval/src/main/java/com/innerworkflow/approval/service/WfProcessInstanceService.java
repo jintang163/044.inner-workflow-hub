@@ -5,6 +5,8 @@ import com.innerworkflow.approval.dto.WfMyProcessQueryDTO;
 import com.innerworkflow.approval.entity.WfProcessInstance;
 import com.innerworkflow.approval.vo.WfProcessInstanceVO;
 
+import java.util.List;
+
 public interface WfProcessInstanceService {
 
     IPage<WfProcessInstanceVO> pageMyProcess(WfMyProcessQueryDTO queryDTO);
@@ -20,4 +22,6 @@ public interface WfProcessInstanceService {
     boolean updateById(WfProcessInstance instance);
 
     WfProcessInstanceVO getDetailById(Long id);
+
+    List<WfProcessInstance> listByProcessKey(String processKey);
 }

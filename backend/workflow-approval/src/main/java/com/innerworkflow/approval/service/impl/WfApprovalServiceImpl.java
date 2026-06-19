@@ -1925,17 +1925,29 @@ public class WfApprovalServiceImpl implements WfApprovalService {
             return trackingMap;
         }
 
+        String processKey = instance.getProcessKey();
+
         Map<String, List<HistoricActivityInstance>> activitiesByNode = historicActivities.stream()
                 .filter(a -> !"sequenceFlow".equals(a.getActivityType()))
                 .collect(Collectors.groupingBy(HistoricActivityInstance::getActivityId, LinkedHashMap::new, Collectors.toList()));
 
-        Map<String, List<HistoricActivityInstance>> flowActivities = historicActivities.stream()
+        Set<String> actualFlowIds = historicActivities.stream()
                 .filter(a -> "sequenceFlow".equals(a.getActivityType()))
-                .collect(Collectors.groupingBy(HistoricActivityInstance::getActivityId));
+                .map(HistoricActivityInstance::getActivityId)
+                .collect(Collectors.toSet());
+
+        List<WfApprovalHistory> currentHistory = approvalHistoryService.listValidByInstanceId(instance.getId());
+        Map<String, List<WfApprovalHistory>> historyByNode = currentHistory.stream()
+                .filter(h -> h.getNodeId() != null)
+                .collect(Collectors.groupingBy(WfApprovalHistory::getNodeId));
+
+        Map<String, Double> historicalAvgByNode = calculateHistoricalAvgDuration(processKey, activitiesByNode.keySet());
+
+        long historicalInstanceCount = countHistoricalInstances(processKey);
+        trackingMap.setHistoricalInstanceCount(historicalInstanceCount);
 
         List<WfTrackingMapVO.TrackingNodeVO> nodes = new ArrayList<>();
         List<WfTrackingMapVO.TrackingEdgeVO> edges = new ArrayList<>();
-        List<Long> allDurations = new ArrayList<>();
 
         for (Map.Entry<String, List<HistoricActivityInstance>> entry : activitiesByNode.entrySet()) {
             String nodeId = entry.getKey();
@@ -1979,45 +1991,31 @@ public class WfApprovalServiceImpl implements WfApprovalService {
             if (firstActivity.getStartTime() != null && lastActivity.getEndTime() != null) {
                 long durationMs = java.time.Duration.between(firstActivity.getStartTime(), lastActivity.getEndTime()).toMillis();
                 nodeVO.setDuration(durationMs);
-                allDurations.add(durationMs);
             }
 
-            List<WfTrackingMapVO.NodeOperatorVO> operators = new ArrayList<>();
-            for (HistoricActivityInstance activity : nodeActivities) {
-                WfTrackingMapVO.NodeOperatorVO operator = new WfTrackingMapVO.NodeOperatorVO();
-                if (activity.getAssignee() != null) {
-                    try {
-                        operator.setUserId(Long.parseLong(activity.getAssignee()));
-                        SysUser user = sysUserService.getById(operator.getUserId());
-                        if (user != null) {
-                            operator.setUserName(user.getRealName());
-                            operator.setUserAvatar(user.getAvatar());
-                        }
-                    } catch (NumberFormatException ignored) {}
-                }
-                operator.setOperateTime(activity.getStartTime());
-                if (activity.getEndTime() != null && activity.getStartTime() != null) {
-                    operator.setDuration(java.time.Duration.between(activity.getStartTime(), activity.getEndTime()).toMillis());
-                }
-                operators.add(operator);
+            Double histAvg = historicalAvgByNode.get(nodeId);
+            nodeVO.setHistoricalAvgDuration(histAvg);
+
+            if (nodeVO.getDuration() != null && histAvg != null && histAvg > 0) {
+                double deviation = (nodeVO.getDuration() - histAvg) / histAvg;
+                nodeVO.setDurationDeviation(deviation);
+                nodeVO.setIsBottleneck(deviation > 0.5);
+            } else {
+                nodeVO.setIsBottleneck(false);
             }
+
+            List<WfTrackingMapVO.NodeOperatorVO> operators = buildNodeOperators(nodeActivities, historyByNode.getOrDefault(nodeId, List.of()));
             nodeVO.setOperators(operators);
 
-            if (bpmnModel != null) {
-                FlowElement flowElement = bpmnModel.getProcesses().isEmpty() ? null
-                        : bpmnModel.getProcesses().get(0).getFlowElement(nodeId);
-                if (flowElement != null) {
-                    List<WfApprovalHistory> nodeHistory = approvalHistoryService.listValidByInstanceId(instance.getId());
-                    for (WfApprovalHistory h : nodeHistory) {
-                        if (nodeId.equals(h.getNodeId()) && h.getOperatorName() != null) {
-                            WfTrackingMapVO.NodeOperatorVO op = operators.stream()
-                                    .filter(o -> h.getOperatorId() != null && h.getOperatorId().equals(o.getUserId()))
-                                    .findFirst().orElse(null);
-                            if (op != null) {
-                                op.setAction(h.getActivityType() != null ? h.getActivityType().toString() : null);
-                                op.setActionRemark(h.getActionRemark());
-                            }
-                        }
+            List<WfApprovalHistory> nodeHistoryList = historyByNode.getOrDefault(nodeId, List.of());
+            if (!nodeHistoryList.isEmpty()) {
+                WfApprovalHistory lastHistory = nodeHistoryList.get(nodeHistoryList.size() - 1);
+                nodeVO.setActionRemark(lastHistory.getActionRemark());
+                nodeVO.setSignatureUrl(lastHistory.getSignatureUrl());
+                if (lastHistory.getActivityType() != null) {
+                    TaskActionEnum actionEnum = TaskActionEnum.getByCode(lastHistory.getActivityType());
+                    if (actionEnum != null) {
+                        nodeVO.setActionName(actionEnum.getDesc());
                     }
                 }
             }
@@ -2025,29 +2023,23 @@ public class WfApprovalServiceImpl implements WfApprovalService {
             nodes.add(nodeVO);
         }
 
-        double avgDuration = allDurations.stream().mapToLong(Long::longValue).average().orElse(0.0);
-        trackingMap.setAverageDuration(avgDuration);
-
-        for (WfTrackingMapVO.TrackingNodeVO node : nodes) {
-            if (node.getDuration() != null && avgDuration > 0) {
-                double deviation = (node.getDuration() - avgDuration) / avgDuration;
-                node.setDurationDeviation(deviation);
-                node.setIsBottleneck(deviation > 0.5);
-            } else {
-                node.setIsBottleneck(false);
-            }
-        }
+        double overallAvg = nodes.stream()
+                .filter(n -> n.getDuration() != null)
+                .mapToLong(WfTrackingMapVO.TrackingNodeVO::getDuration)
+                .average().orElse(0.0);
+        trackingMap.setAverageDuration(overallAvg);
 
         if (bpmnModel != null && !bpmnModel.getProcesses().isEmpty()) {
             Process process = bpmnModel.getProcesses().get(0);
             for (FlowElement element : process.getFlowElements()) {
                 if (element instanceof SequenceFlow sequenceFlow) {
-                    WfTrackingMapVO.TrackingEdgeVO edge = new WfTrackingMapVO.TrackingEdgeVO();
-                    edge.setSourceId(sequenceFlow.getSourceRef());
-                    edge.setTargetId(sequenceFlow.getTargetRef());
-                    edge.setLabel(sequenceFlow.getName());
-                    edge.setIsActualPath(flowActivities.containsKey(sequenceFlow.getId()));
-                    edges.add(edge);
+                    if (actualFlowIds.contains(sequenceFlow.getId())) {
+                        WfTrackingMapVO.TrackingEdgeVO edge = new WfTrackingMapVO.TrackingEdgeVO();
+                        edge.setSourceId(sequenceFlow.getSourceRef());
+                        edge.setTargetId(sequenceFlow.getTargetRef());
+                        edge.setLabel(sequenceFlow.getName());
+                        edges.add(edge);
+                    }
                 }
             }
         }
@@ -2056,5 +2048,108 @@ public class WfApprovalServiceImpl implements WfApprovalService {
         trackingMap.setEdges(edges);
 
         return trackingMap;
+    }
+
+    private Map<String, Double> calculateHistoricalAvgDuration(String processKey, Set<String> nodeIds) {
+        Map<String, Double> result = new HashMap<>();
+        if (processKey == null || nodeIds == null || nodeIds.isEmpty()) {
+            return result;
+        }
+
+        try {
+            List<WfProcessInstance> allInstances = processInstanceService.listByProcessKey(processKey);
+            if (allInstances == null || allInstances.isEmpty()) {
+                return result;
+            }
+
+            Map<String, List<Long>> durationByNode = new HashMap<>();
+
+            for (WfProcessInstance inst : allInstances) {
+                List<WfApprovalHistory> historyList = approvalHistoryService.listValidByInstanceId(inst.getId());
+                for (WfApprovalHistory h : historyList) {
+                    if (h.getNodeId() != null && nodeIds.contains(h.getNodeId()) && h.getDuration() != null && h.getDuration() > 0) {
+                        durationByNode.computeIfAbsent(h.getNodeId(), k -> new ArrayList<>()).add(h.getDuration());
+                    }
+                }
+            }
+
+            for (Map.Entry<String, List<Long>> entry : durationByNode.entrySet()) {
+                double avg = entry.getValue().stream().mapToLong(Long::longValue).average().orElse(0.0);
+                result.put(entry.getKey(), avg);
+            }
+        } catch (Exception e) {
+            log.warn("计算历史平均耗时失败, processKey={}, error={}", processKey, e.getMessage());
+        }
+
+        return result;
+    }
+
+    private long countHistoricalInstances(String processKey) {
+        if (processKey == null) {
+            return 0L;
+        }
+        try {
+            List<WfProcessInstance> allInstances = processInstanceService.listByProcessKey(processKey);
+            return allInstances != null ? allInstances.size() : 0L;
+        } catch (Exception e) {
+            return 0L;
+        }
+    }
+
+    private List<WfTrackingMapVO.NodeOperatorVO> buildNodeOperators(
+            List<HistoricActivityInstance> nodeActivities,
+            List<WfApprovalHistory> nodeHistoryList) {
+
+        Map<Long, WfApprovalHistory> historyByOperator = nodeHistoryList.stream()
+                .filter(h -> h.getOperatorId() != null)
+                .collect(Collectors.toMap(WfApprovalHistory::getOperatorId, h -> h, (a, b) -> b));
+
+        List<WfTrackingMapVO.NodeOperatorVO> operators = new ArrayList<>();
+
+        for (HistoricActivityInstance activity : nodeActivities) {
+            WfTrackingMapVO.NodeOperatorVO operator = new WfTrackingMapVO.NodeOperatorVO();
+            if (activity.getAssignee() != null) {
+                try {
+                    Long userId = Long.parseLong(activity.getAssignee());
+                    operator.setUserId(userId);
+
+                    SysUser user = sysUserService.getById(userId);
+                    if (user != null) {
+                        operator.setUserName(user.getRealName());
+                        operator.setUserAvatar(user.getAvatar());
+                        operator.setDeptName(user.getDeptId() != null ? user.getDeptId().toString() : null);
+                    }
+
+                    WfApprovalHistory matchingHistory = historyByOperator.get(userId);
+                    if (matchingHistory != null) {
+                        if (matchingHistory.getActivityType() != null) {
+                            TaskActionEnum actionEnum = TaskActionEnum.getByCode(matchingHistory.getActivityType());
+                            if (actionEnum != null) {
+                                operator.setAction(actionEnum.getCode().toString());
+                                operator.setActionName(actionEnum.getDesc());
+                            }
+                        }
+                        operator.setActionRemark(matchingHistory.getActionRemark());
+                        operator.setOperateTime(matchingHistory.getOperateTime());
+                        operator.setDuration(matchingHistory.getDuration());
+                    } else {
+                        operator.setOperateTime(activity.getStartTime());
+                        if (activity.getEndTime() != null && activity.getStartTime() != null) {
+                            operator.setDuration(java.time.Duration.between(
+                                    activity.getStartTime(), activity.getEndTime()).toMillis());
+                        }
+                    }
+                } catch (NumberFormatException ignored) {}
+            } else {
+                operator.setOperateTime(activity.getStartTime());
+                if (activity.getEndTime() != null && activity.getStartTime() != null) {
+                    operator.setDuration(java.time.Duration.between(
+                            activity.getStartTime(), activity.getEndTime()).toMillis());
+                }
+            }
+            operators.add(operator);
+        }
+
+        return operators;
     }
 }

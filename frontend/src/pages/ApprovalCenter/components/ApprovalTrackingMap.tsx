@@ -1,17 +1,16 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react'
-import { Spin, Empty, Drawer, Descriptions, Tag, Avatar, Space, Typography, Tooltip, Button } from 'antd'
+import { Spin, Empty, Drawer, Descriptions, Tag, Avatar, Space, Typography, Tooltip, Button, Divider } from 'antd'
 import {
   UserOutlined,
   ClockCircleOutlined,
-  CheckCircleOutlined,
-  CloseCircleOutlined,
   ThunderboltOutlined,
   ZoomInOutlined,
   ZoomOutOutlined,
-  FullscreenOutlined
+  FullscreenOutlined,
+  HistoryOutlined
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
-import type { TrackingMapVO, TrackingNodeVO, TrackingEdgeVO } from '@/types/approval'
+import type { TrackingMapVO, TrackingNodeVO } from '@/types/approval'
 
 const { Text, Paragraph } = Typography
 
@@ -46,20 +45,20 @@ const getNodeColor = (node: TrackingNodeVO): string => {
   return '#69c0ff'
 }
 
-const getNodeTypeIcon = (category: number): string => {
-  switch (category) {
-    case 2: return '●'
-    case 3: return '◉'
-    case 4: return '◇'
-    case 5: return '▦'
-    default: return '■'
-  }
-}
-
 const getNodeStatusLabel = (node: TrackingNodeVO) => {
   if (node.status === 'active') return <Tag color="processing">进行中</Tag>
   if (node.status === 'completed') return <Tag color="success">已完成</Tag>
   return <Tag>{node.statusName}</Tag>
+}
+
+const getActionColor = (actionName?: string) => {
+  if (!actionName) return 'default'
+  if (actionName.includes('同意') || actionName.includes('通过')) return 'green'
+  if (actionName.includes('拒绝') || actionName.includes('驳回')) return 'red'
+  if (actionName.includes('转审')) return 'blue'
+  if (actionName.includes('加签')) return 'purple'
+  if (actionName.includes('委派')) return 'cyan'
+  return 'default'
 }
 
 const ApprovalTrackingMap: React.FC<ApprovalTrackingMapProps> = ({
@@ -97,7 +96,7 @@ const ApprovalTrackingMap: React.FC<ApprovalTrackingMapProps> = ({
         const width = container.offsetWidth
         const graphHeight = typeof height === 'number' ? height : 520
 
-        const nodes = trackingMap.nodes.map((node, index) => {
+        const nodes = trackingMap.nodes.map((node) => {
           const color = getNodeColor(node)
           const isUserTask = node.nodeCategory === 1
           const operatorNames = node.operators
@@ -105,28 +104,39 @@ const ApprovalTrackingMap: React.FC<ApprovalTrackingMapProps> = ({
             .map(o => o.userName)
             .join(', ')
 
+          const actionNameStr = node.actionName || ''
+          const startTimeStr = node.startTime
+            ? dayjs(node.startTime).format('MM-DD HH:mm')
+            : ''
+
           let labelText = node.nodeName || node.nodeId
-          if (operatorNames && isUserTask) {
+          if (isUserTask && operatorNames) {
             labelText += `\n${operatorNames}`
           }
+          if (actionNameStr) {
+            labelText += `\n${actionNameStr}`
+          }
+          if (startTimeStr) {
+            labelText += `\n${startTimeStr}`
+          }
           if (node.duration != null) {
-            labelText += `\n${formatDuration(node.duration)}`
+            labelText += ` · ${formatDuration(node.duration)}`
           }
 
           return {
             id: node.nodeId,
             type: isUserTask ? 'rect' : 'circle',
-            size: isUserTask ? [180, 72] : 48,
+            size: isUserTask ? [200, 80] : 48,
             label: labelText,
             labelCfg: {
               style: {
                 fill: '#333',
                 fontSize: 11,
-                textAlign: 'center',
-                textBaseline: 'middle'
+                textAlign: 'center' as const,
+                textBaseline: 'middle' as const
               },
               position: 'bottom' as const,
-              offset: isUserTask ? 0 : 30
+              offset: isUserTask ? 0 : 36
             },
             style: {
               fill: node.status === 'active' ? '#e6f7ff' : (node.isBottleneck ? '#fff1f0' : '#f6ffed'),
@@ -163,17 +173,14 @@ const ApprovalTrackingMap: React.FC<ApprovalTrackingMapProps> = ({
             target: edge.targetId,
             type: 'cubic-horizontal',
             style: {
-              stroke: edge.isActualPath ? '#1890ff' : '#d9d9d9',
-              lineWidth: edge.isActualPath ? 2.5 : 1,
-              lineDash: edge.isActualPath ? [] : [4, 4],
-              endArrow: edge.isActualPath
-                ? { path: 'M 0,0 L 8,4 L 8,-4 Z', fill: '#1890ff' }
-                : { path: 'M 0,0 L 6,3 L 6,-3 Z', fill: '#d9d9d9' }
+              stroke: '#1890ff',
+              lineWidth: 2,
+              endArrow: { path: 'M 0,0 L 8,4 L 8,-4 Z', fill: '#1890ff' }
             },
             label: edge.label || '',
             labelCfg: {
               style: {
-                fill: edge.isActualPath ? '#1890ff' : '#999',
+                fill: '#1890ff',
                 fontSize: 10,
                 background: {
                   fill: '#fff',
@@ -194,8 +201,8 @@ const ApprovalTrackingMap: React.FC<ApprovalTrackingMapProps> = ({
           layout: {
             type: 'dagre',
             rankdir: 'LR',
-            nodesep: 30,
-            ranksep: 80,
+            nodesep: 40,
+            ranksep: 100,
             workerEnabled: true
           },
           defaultNode: {
@@ -305,16 +312,20 @@ const ApprovalTrackingMap: React.FC<ApprovalTrackingMapProps> = ({
       }}>
         <Space size={16}>
           <Text type="secondary">
-            平均耗时：<Text strong>{formatDuration(trackingMap.averageDuration)}</Text>
+            <HistoryOutlined /> 历史实例：
+            <Text strong>{trackingMap.historicalInstanceCount ?? '-'}</Text>
+          </Text>
+          <Text type="secondary">
+            本流程平均耗时：<Text strong>{formatDuration(trackingMap.averageDuration)}</Text>
           </Text>
           <Text type="secondary">
             节点数：<Text strong>{trackingMap.nodes.length}</Text>
           </Text>
           <Space size={4}>
-            <Tooltip title="快于平均"><Tag color="green">快</Tag></Tooltip>
-            <Tooltip title="接近平均"><Tag color="blue">正常</Tag></Tooltip>
-            <Tooltip title="慢于平均"><Tag color="orange">慢</Tag></Tooltip>
-            <Tooltip title="瓶颈节点(>1.5倍平均)"><Tag color="red">瓶颈</Tag></Tooltip>
+            <Tooltip title="快于历史平均"><Tag color="green">快</Tag></Tooltip>
+            <Tooltip title="接近历史平均"><Tag color="blue">正常</Tag></Tooltip>
+            <Tooltip title="慢于历史平均"><Tag color="orange">慢</Tag></Tooltip>
+            <Tooltip title="瓶颈节点(>1.5倍历史平均)"><Tag color="red">瓶颈</Tag></Tooltip>
           </Space>
         </Space>
         <Space size={4}>
@@ -329,7 +340,7 @@ const ApprovalTrackingMap: React.FC<ApprovalTrackingMapProps> = ({
       <Drawer
         title={selectedNode?.nodeName || '节点详情'}
         placement="right"
-        width={420}
+        width={440}
         open={drawerVisible}
         onClose={() => setDrawerVisible(false)}
       >
@@ -340,6 +351,11 @@ const ApprovalTrackingMap: React.FC<ApprovalTrackingMapProps> = ({
               <Descriptions.Item label="节点名称">{selectedNode.nodeName}</Descriptions.Item>
               <Descriptions.Item label="节点类型">{selectedNode.nodeType}</Descriptions.Item>
               <Descriptions.Item label="状态">{getNodeStatusLabel(selectedNode)}</Descriptions.Item>
+              {selectedNode.actionName && (
+                <Descriptions.Item label="操作">
+                  <Tag color={getActionColor(selectedNode.actionName)}>{selectedNode.actionName}</Tag>
+                </Descriptions.Item>
+              )}
               <Descriptions.Item label="开始时间">
                 {selectedNode.startTime ? dayjs(selectedNode.startTime).format('YYYY-MM-DD HH:mm:ss') : '-'}
               </Descriptions.Item>
@@ -349,13 +365,18 @@ const ApprovalTrackingMap: React.FC<ApprovalTrackingMapProps> = ({
               <Descriptions.Item label="消耗时长">
                 <Space>
                   <Text strong>{formatDuration(selectedNode.duration)}</Text>
+                  {selectedNode.historicalAvgDuration != null && selectedNode.historicalAvgDuration > 0 && (
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      (历史平均 {formatDuration(selectedNode.historicalAvgDuration)})
+                    </Text>
+                  )}
                   {selectedNode.durationDeviation != null && (
                     <Tag color={
                       selectedNode.durationDeviation < -0.3 ? 'green'
                         : selectedNode.durationDeviation > 0.5 ? 'red'
                           : selectedNode.durationDeviation > 0.3 ? 'orange' : 'blue'
                     }>
-                      {selectedNode.durationDeviation > 0 ? '+' : ''}
+                      vs历史 {selectedNode.durationDeviation > 0 ? '+' : ''}
                       {(selectedNode.durationDeviation * 100).toFixed(0)}%
                     </Tag>
                   )}
@@ -366,9 +387,29 @@ const ApprovalTrackingMap: React.FC<ApprovalTrackingMapProps> = ({
               </Descriptions.Item>
             </Descriptions>
 
+            {selectedNode.actionRemark && (
+              <>
+                <Divider style={{ margin: 0 }}>操作意见</Divider>
+                <Paragraph style={{ background: '#f6f8fa', padding: 12, borderRadius: 6, whiteSpace: 'pre-wrap' }}>
+                  {selectedNode.actionRemark}
+                </Paragraph>
+              </>
+            )}
+
+            {selectedNode.signatureUrl && (
+              <>
+                <Divider style={{ margin: 0 }}>手写签名</Divider>
+                <img
+                  src={selectedNode.signatureUrl}
+                  alt="签名"
+                  style={{ width: 140, height: 56, objectFit: 'contain', border: '1px dashed #d9d9d9', borderRadius: 4, background: '#fff' }}
+                />
+              </>
+            )}
+
             {selectedNode.operators.length > 0 && (
               <>
-                <Text strong>处理人</Text>
+                <Divider style={{ margin: 0 }}>处理人 ({selectedNode.operators.length})</Divider>
                 {selectedNode.operators.map((op, idx) => (
                   <div
                     key={idx}
@@ -376,24 +417,30 @@ const ApprovalTrackingMap: React.FC<ApprovalTrackingMapProps> = ({
                       display: 'flex',
                       alignItems: 'flex-start',
                       gap: 12,
-                      padding: '8px 12px',
+                      padding: '10px 12px',
                       background: '#fafafa',
                       borderRadius: 6,
-                      border: '1px solid #f0f0f0'
+                      border: '1px solid #f0f0f0',
+                      marginBottom: 8
                     }}
                   >
-                    <Avatar size={32} src={op.userAvatar} icon={<UserOutlined />}>
+                    <Avatar size={36} src={op.userAvatar} icon={<UserOutlined />}>
                       {op.userName?.charAt(0)}
                     </Avatar>
                     <div style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Text strong>{op.userName}</Text>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
+                        <Space size={6}>
+                          <Text strong>{op.userName}</Text>
+                          {op.actionName && (
+                            <Tag color={getActionColor(op.actionName)} style={{ fontSize: 11 }}>{op.actionName}</Tag>
+                          )}
+                        </Space>
                         {op.deptName && <Text type="secondary" style={{ fontSize: 12 }}>{op.deptName}</Text>}
                       </div>
                       {op.operateTime && (
-                        <Text type="secondary" style={{ fontSize: 12 }}>
-                          <ClockCircleOutlined /> {dayjs(op.operateTime).format('MM-DD HH:mm')}
-                          {op.duration != null && ` · ${formatDuration(op.duration)}`}
+                        <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 2 }}>
+                          <ClockCircleOutlined /> {dayjs(op.operateTime).format('YYYY-MM-DD HH:mm')}
+                          {op.duration != null && ` · 用时 ${formatDuration(op.duration)}`}
                         </Text>
                       )}
                       {op.actionRemark && (
@@ -404,15 +451,6 @@ const ApprovalTrackingMap: React.FC<ApprovalTrackingMapProps> = ({
                     </div>
                   </div>
                 ))}
-              </>
-            )}
-
-            {selectedNode.actionRemark && (
-              <>
-                <Text strong>操作意见</Text>
-                <Paragraph style={{ background: '#f6f8fa', padding: 12, borderRadius: 6 }}>
-                  {selectedNode.actionRemark}
-                </Paragraph>
               </>
             )}
           </Space>
