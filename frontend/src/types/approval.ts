@@ -498,3 +498,122 @@ export interface BatchRemindResultVO {
     reason: string
   }>
 }
+
+export interface ProcessVersion {
+  id: number
+  processDefinitionId: number
+  processKey: string
+  version: number
+  flowableDeploymentId: string
+  flowableProcessDefId: string
+  formId: number
+  formVersion: number
+  versionRemark: string
+  isCurrent: number
+  suspendStatus: number
+  createTime: string
+}
+
+export interface MigrateInstanceVO {
+  id: number
+  instanceNo: string
+  processDefinitionId: number
+  processKey: string
+  processVersionId: number
+  title: string
+  startUserId: number
+  startUserName: string
+  startDeptId: number
+  startDeptName: string
+  startTime: string
+  currentVersion: number
+  latestVersion: number
+  latestVersionId: number
+  versionRemark: string
+  versionGap: number
+  canMigrate: boolean
+  migrateTip: string
+  currentNodeIds: string[]
+  instanceStatus: number
+  availableVersions: ProcessVersion[]
+}
+
+export interface CompatibilityCheckVO {
+  compatible: boolean
+  errors: string[]
+  warnings: string[]
+  infos: string[]
+  nodeCheck: {
+    sourceNodes: string[]
+    targetNodes: string[]
+    missingNodes: string[]
+    matchedNodes: string[]
+  }
+  variableCheck: {
+    sourceVariables: string[]
+    targetVariables: string[]
+    missingVariables: string[]
+    matchedVariables: string[]
+  }
+}
+
+export interface ProcessMigrationDTO {
+  targetVersionId: number
+  processDefinitionId: number
+  instanceIds: number[]
+  remark?: string
+  forceMigrate?: boolean
+}
+
+export interface MigrationDetailItem {
+  detailId: number
+  instanceId: number
+  instanceNo: string
+  title: string
+  startUserName: string
+  migrationResult: number
+  migrationResultName: string
+  skipReason: string
+  errorMessage: string
+  sourceCurrentNodeIds: string[]
+  targetCurrentNodeIds: string[]
+  compatibilityCheck: CompatibilityCheckVO
+}
+
+export interface ProcessMigrationResultVO {
+  migrationNo: string
+  recordId: number
+  processKey: string
+  sourceVersionId: number
+  sourceVersion: number
+  targetVersionId: number
+  targetVersion: number
+  totalCount: number
+  successCount: number
+  failCount: number
+  skipCount: number
+  migrationStatus: number
+  migrationStatusName: string
+  createTime: string
+  details: MigrationDetailItem[]
+}
+
+export interface ProcessMigrationRecordVO {
+  id: number
+  migrationNo: string
+  processKey: string
+  processDefinitionId: number
+  sourceVersionId: number
+  sourceVersion: number
+  targetVersionId: number
+  targetVersion: number
+  totalCount: number
+  successCount: number
+  failCount: number
+  skipCount: number
+  migrationStatus: number
+  migrationStatusName: string
+  remark: string
+  createByName: string
+  createTime: string
+}

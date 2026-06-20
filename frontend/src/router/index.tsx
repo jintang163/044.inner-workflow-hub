@@ -11,6 +11,7 @@ import DelegationList from '@/pages/ApprovalCenter/DelegationList'
 import VacationList from '@/pages/ApprovalCenter/VacationList'
 import AgentConfigList from '@/pages/ApprovalCenter/AgentConfigList'
 import CommentTemplateManage from '@/pages/ApprovalCenter/CommentTemplateManage'
+import ProcessInstanceMigration from '@/pages/ApprovalCenter/ProcessInstanceMigration'
 import TenantManagement from '@/pages/System/TenantManagement'
 
 const ProcessDefinition = () => <div>流程定义</div>
@@ -54,7 +55,8 @@ export const routes: RouteObject[] = [
           { path: 'delegation', element: <DelegationList /> },
           { path: 'vacation', element: <VacationList /> },
           { path: 'agent-config', element: <AgentConfigList /> },
-          { path: 'comment-template', element: <CommentTemplateManage /> }
+          { path: 'comment-template', element: <CommentTemplateManage /> },
+          { path: 'process-migration', element: <ProcessInstanceMigration /> }
         ]
       },
       {

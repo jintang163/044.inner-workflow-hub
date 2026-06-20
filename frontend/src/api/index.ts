@@ -43,7 +43,13 @@ import {
   CommentTemplateCategorySaveDTO,
   CommentTemplateQueryDTO,
   BatchRemindDTO,
-  BatchRemindResultVO
+  BatchRemindResultVO,
+  MigrateInstanceVO,
+  CompatibilityCheckVO,
+  ProcessMigrationDTO,
+  ProcessMigrationResultVO,
+  ProcessMigrationRecordVO,
+  ProcessVersion
 } from '@/types/approval'
 import {
   TenantVO,
@@ -349,6 +355,29 @@ export const approvalApi = {
       method: 'get',
       params: intervalMinutes !== undefined ? { intervalMinutes } : undefined
     }),
+
+  migrationPageInstances: (params: any) =>
+    request<PageResult<MigrateInstanceVO>>({ url: '/api/approval/migration/instances', method: 'get', params }),
+  migrationListInstances: (params: any) =>
+    request<MigrateInstanceVO[]>({ url: '/api/approval/migration/instances/list', method: 'get', params }),
+  migrationCheckCompatibility: (instanceId: number, targetVersionId: number) =>
+    request<CompatibilityCheckVO>({
+      url: '/api/approval/migration/check-compatibility',
+      method: 'get',
+      params: { instanceId, targetVersionId }
+    }),
+  migrationBatchMigrate: (data: ProcessMigrationDTO) =>
+    request<ProcessMigrationResultVO>({ url: '/api/approval/migration/batch-migrate', method: 'post', data }),
+  migrationGetResult: (recordId: number) =>
+    request<ProcessMigrationResultVO>({ url: `/api/approval/migration/result/${recordId}`, method: 'get' }),
+  migrationPageRecords: (processDefinitionId?: number, params?: any) =>
+    request<PageResult<ProcessMigrationRecordVO>>({
+      url: '/api/approval/migration/records',
+      method: 'get',
+      params: { ...(params || {}), processDefinitionId }
+    }),
+  migrationDownloadBackup: (recordId: number) =>
+    `${import.meta.env.VITE_API_BASE_URL || ''}/api/approval/migration/backup/download/${recordId}`,
 }
 
 export const notifyApi = {

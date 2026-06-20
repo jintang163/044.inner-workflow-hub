@@ -49,7 +49,8 @@ const menuItems: MenuItem[] = [
       { key: '/approval/cc', icon: <SendOutlined />, label: '抄送我的' },
       { key: '/approval/my-apply', icon: <FileTextOutlined />, label: '我的流程' },
       { key: '/approval/delegation', icon: <UserSwitchOutlined />, label: '委托代理' },
-      { key: '/approval/comment-template', icon: <FormOutlined />, label: '意见模板' }
+      { key: '/approval/comment-template', icon: <FormOutlined />, label: '意见模板' },
+      { key: '/approval/process-migration', icon: <SwapOutlined />, label: '流程实例迁移' }
     ]
   },
   {
