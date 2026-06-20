@@ -69,17 +69,37 @@ public class WfAttachmentServiceImpl extends ServiceImpl<WfAttachmentMapper, WfA
     }
 
     @Override
-    public List<WfAttachmentVO> listByBizWithPermission(String bizType, String bizId, String nodeId) {
+    public List<WfAttachmentVO> listByBizWithPermission(String bizType, String bizId, Long processVersionId, String currentNodeId) {
         List<WfAttachmentVO> allAttachments = listByBiz(bizType, bizId);
-        if (StrUtil.isBlank(nodeId)) {
+        if (processVersionId == null) {
             return allAttachments;
         }
+
+        LambdaQueryWrapper<WfAttachmentPermission> permWrapper = new LambdaQueryWrapper<>();
+        permWrapper.eq(WfAttachmentPermission::getProcessVersionId, processVersionId);
+        List<WfAttachmentPermission> permissions = attachmentPermissionMapper.selectList(permWrapper);
+        Map<String, WfAttachmentPermission> permMap = permissions.stream()
+                .collect(Collectors.toMap(WfAttachmentPermission::getNodeId, p -> p, (a, b) -> a));
+
         return allAttachments.stream()
                 .filter(vo -> {
                     if (StrUtil.isBlank(vo.getNodeId())) {
                         return true;
                     }
-                    return nodeId.equals(vo.getNodeId());
+                    WfAttachmentPermission perm = permMap.get(vo.getNodeId());
+                    if (perm == null) {
+                        return true;
+                    }
+                    return perm.getAttachmentVisible() == null || perm.getAttachmentVisible() == 1;
+                })
+                .filter(vo -> {
+                    if (StrUtil.isBlank(currentNodeId)) {
+                        return true;
+                    }
+                    if (StrUtil.isBlank(vo.getNodeId())) {
+                        return true;
+                    }
+                    return currentNodeId.equals(vo.getNodeId());
                 })
                 .collect(Collectors.toList());
     }
@@ -89,7 +109,7 @@ public class WfAttachmentServiceImpl extends ServiceImpl<WfAttachmentMapper, WfA
         if (ids == null || ids.isEmpty()) {
             return Collections.emptyList();
         }
-        return this.listByIds(ids).stream()
+        return baseMapper.selectBatchIds(ids).stream()
                 .map(this::convertToVO)
                 .collect(Collectors.toList());
     }
@@ -194,7 +214,7 @@ public class WfAttachmentServiceImpl extends ServiceImpl<WfAttachmentMapper, WfA
         if (ids == null || ids.isEmpty()) {
             throw new BusinessException(ResultCode.PARAM_ERROR, "请选择要下载的附件");
         }
-        List<WfAttachment> attachments = this.listByIds(ids);
+        List<WfAttachment> attachments = baseMapper.selectBatchIds(ids);
         if (attachments.isEmpty()) {
             throw new BusinessException(ResultCode.NOT_FOUND, "附件不存在");
         }

@@ -16,7 +16,7 @@ public interface WfAttachmentService {
 
     List<WfAttachmentVO> listByBiz(String bizType, String bizId);
 
-    List<WfAttachmentVO> listByBizWithPermission(String bizType, String bizId, String nodeId);
+    List<WfAttachmentVO> listByBizWithPermission(String bizType, String bizId, Long processVersionId, String currentNodeId);
 
     List<WfAttachmentVO> listByIds(List<Long> ids);
 

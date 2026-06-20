@@ -416,7 +416,7 @@ const ApplyForm: React.FC = () => {
         title: values.title || selectedProcess.processName,
         formData: values,
         ccUserIds,
-        attachmentIds: fileList.map(f => f.uid as number).filter(Boolean),
+        attachmentIds: fileList.filter(f => f.status === 'done').map(f => Number(f.uid)).filter(Boolean),
         draftId: draftId || undefined
       }
       // const res = await approvalApi.start(submitData)
@@ -478,8 +478,27 @@ const ApplyForm: React.FC = () => {
     })
   }
 
-  const beforeUpload: UploadProps['beforeUpload'] = (file) => {
-    setFileList(prev => [...prev, file as UploadFile])
+  const beforeUpload: UploadProps['beforeUpload'] = async (file) => {
+    try {
+      const result = await approvalApi.attachmentUpload(file as File)
+      const uploadFile: UploadFile = {
+        uid: String(result.id),
+        name: result.fileName,
+        size: result.fileSize,
+        status: 'done',
+        response: result
+      }
+      setFileList(prev => [...prev, uploadFile])
+    } catch (err: any) {
+      message.error(`${file.name} 上传失败: ${err?.message || '未知错误'}`)
+      const uploadFile: UploadFile = {
+        uid: file.uid,
+        name: file.name,
+        size: file.size,
+        status: 'error'
+      }
+      setFileList(prev => [...prev, uploadFile])
+    }
     return false
   }
 

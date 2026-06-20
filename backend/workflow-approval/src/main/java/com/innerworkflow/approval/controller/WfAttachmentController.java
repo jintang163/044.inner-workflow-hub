@@ -49,9 +49,10 @@ public class WfAttachmentController {
     @GetMapping("/list")
     public R<List<WfAttachmentVO>> listByBiz(@RequestParam String bizType,
                                               @RequestParam String bizId,
-                                              @RequestParam(required = false) String nodeId) {
-        if (nodeId != null) {
-            return R.success(attachmentService.listByBizWithPermission(bizType, bizId, nodeId));
+                                              @RequestParam(required = false) String nodeId,
+                                              @RequestParam(required = false) Long processVersionId) {
+        if (processVersionId != null || nodeId != null) {
+            return R.success(attachmentService.listByBizWithPermission(bizType, bizId, processVersionId, nodeId));
         }
         return R.success(attachmentService.listByBiz(bizType, bizId));
     }

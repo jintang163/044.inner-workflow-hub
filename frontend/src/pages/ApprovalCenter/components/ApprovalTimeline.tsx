@@ -161,7 +161,7 @@ const ApprovalTimeline: React.FC<ApprovalTimelineProps> = ({ history = [], loadi
                   附件：
                 </Text>
                 {record.attachmentList.map(att => (
-                  <a key={att.id} href={att.fileUrl} target="_blank" rel="noreferrer">
+                  <a key={att.id} href={att.accessUrl || att.downloadUrl} target="_blank" rel="noreferrer">
                     {att.fileName}
                   </a>
                 ))}

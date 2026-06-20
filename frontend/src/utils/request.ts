@@ -29,6 +29,9 @@ service.interceptors.request.use(
 
 service.interceptors.response.use(
   (response: AxiosResponse) => {
+    if (response.config.responseType === 'blob') {
+      return response.data
+    }
     const res = response.data as ApiResponse
     if (res.code !== 200) {
       if (res.code === 401) {

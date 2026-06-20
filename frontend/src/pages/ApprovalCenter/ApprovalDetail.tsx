@@ -40,10 +40,11 @@ import MultiInstanceSignCard from './components/MultiInstanceSignCard'
 import ApprovalTrackingMap from './components/ApprovalTrackingMap'
 import AiRecommendationCard from '@/components/business/AiRecommendationCard'
 import { approvalApi, formApi, aiApi } from '@/api'
-import type { ProcessInstanceVO, ApprovalHistoryVO, ApprovalTaskVO, MultiInstanceSignVO, TrackingMapVO, ApprovalStatusUpdateVO } from '@/types/approval'
+import type { ProcessInstanceVO, ApprovalHistoryVO, ApprovalTaskVO, MultiInstanceSignVO, TrackingMapVO, ApprovalStatusUpdateVO, AttachmentVO } from '@/types/approval'
 import type { FormilySchema } from '@/types/form'
 import type { AiRecommendationVO } from '@/types/ai'
 import FormRenderer from '@/components/FormRenderer'
+import AttachmentList from '@/components/business/AttachmentList'
 import { useWebSocket } from '@/hooks/useWebSocket'
 import { WS_BASE_URL, RESULT_CODE_VERSION_CONFLICT } from '@/config/websocket'
 import dayjs from 'dayjs'
@@ -107,6 +108,7 @@ const ApprovalDetail: React.FC = () => {
   const [trackingMap, setTrackingMap] = useState<TrackingMapVO | null>(null)
   const [version, setVersion] = useState<number | undefined>()
   const [remoteUpdateAlert, setRemoteUpdateAlert] = useState<{ show: boolean; operatorName?: string; actionTypeName?: string }>({ show: false })
+  const [attachments, setAttachments] = useState<AttachmentVO[]>([])
   const notificationShownRef = useRef(false)
 
   const { subscribe, unsubscribe } = useWebSocket({
@@ -187,6 +189,16 @@ const ApprovalDetail: React.FC = () => {
       setHistory(histRes)
       setMultiInstanceSignList(instRes?.multiInstanceSignList || [])
       setTrackingMap(instRes?.trackingMap || null)
+
+      try {
+        const attRes = await approvalApi.attachmentList({
+          bizType: 'FORM',
+          bizId: instanceNo
+        })
+        setAttachments(attRes || [])
+      } catch (_) {
+        setAttachments([])
+      }
 
       const newVersion = instRes?.version ?? currentTask?.version
       if (newVersion !== undefined) {
@@ -663,6 +675,20 @@ const ApprovalDetail: React.FC = () => {
                       </Space>
                     )
                   },
+                  {
+                    key: 'attachment',
+                    label: (
+                      <Space size={4}>
+                        <span>📎</span>
+                        <span>附件资料</span>
+                        {attachments.length > 0 && (
+                          <Tag color="blue" style={{ marginLeft: 4, fontSize: 11 }}>
+                            {attachments.length}
+                          </Tag>
+                        )}
+                      </Space>
+                    )
+                  },
                   ...(multiInstanceSignList.length > 0 ? [{
                     key: 'sign',
                     label: (
@@ -696,6 +722,14 @@ const ApprovalDetail: React.FC = () => {
               <div style={{ padding: '0 24px 24px' }}>
                 {activeTab === 'form' && (
                   instance ? renderFormContent() : <Empty description="暂无表单数据" />
+                )}
+                {activeTab === 'attachment' && (
+                  <AttachmentList
+                    attachments={attachments}
+                    editable={false}
+                    showCheckbox={true}
+                    onListChange={setAttachments}
+                  />
                 )}
                 {activeTab === 'sign' && multiInstanceSignList.length > 0 && (
                   <Space direction="vertical" size={0} style={{ width: '100%' }}>

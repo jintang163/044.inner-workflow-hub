@@ -11,9 +11,22 @@ export type ActivityType = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8
 export interface AttachmentVO {
   id: number
   fileName: string
-  fileUrl: string
+  fileSuffix: string
   fileSize: number
-  uploadTime: string
+  fileType: string
+  storageType?: number
+  bucketName?: string
+  objectName?: string
+  accessUrl: string
+  previewUrl: string
+  downloadUrl: string
+  uploadUserId?: number
+  uploadUserName?: string
+  bizType?: string
+  bizId?: string
+  nodeId?: string
+  previewable: boolean
+  createTime: string
 }
 
 export interface ApprovalTaskVO {

@@ -34,7 +34,8 @@ import {
   DelegationSaveDTO,
   DelegationQueryDTO,
   BatchTransferDTO,
-  TransferRecordVO
+  TransferRecordVO,
+  AttachmentVO
 } from '@/types/approval'
 import {
   TenantVO,
@@ -209,7 +210,33 @@ export const approvalApi = {
   transferRecordPage: (params?: { pageNum?: number; pageSize?: number; transferType?: number }) =>
     request<PageResult<TransferRecordVO>>({ url: '/api/approval/transfer-record/page', method: 'get', params }),
   transferRecordByInstance: (instanceId: number) =>
-    request<TransferRecordVO[]>({ url: `/api/approval/transfer-record/instance/${instanceId}`, method: 'get' })
+    request<TransferRecordVO[]>({ url: `/api/approval/transfer-record/instance/${instanceId}`, method: 'get' }),
+
+  attachmentUpload: (file: File, bizType?: string, bizId?: string, nodeId?: string) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    if (bizType) formData.append('bizType', bizType)
+    if (bizId) formData.append('bizId', bizId)
+    if (nodeId) formData.append('nodeId', nodeId)
+    return request<AttachmentVO>({
+      url: '/api/approval/attachment/upload',
+      method: 'post',
+      data: formData,
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  },
+  attachmentList: (params: { bizType: string; bizId: string; nodeId?: string; processVersionId?: number }) =>
+    request<AttachmentVO[]>({ url: '/api/approval/attachment/list', method: 'get', params }),
+  attachmentListByIds: (ids: number[]) =>
+    request<AttachmentVO[]>({ url: '/api/approval/attachment/listByIds', method: 'get', params: { ids } }),
+  attachmentRemove: (id: number) =>
+    request<void>({ url: `/api/approval/attachment/${id}`, method: 'delete' }),
+  attachmentPreviewUrl: (id: number) =>
+    request<string>({ url: `/api/approval/attachment/${id}/preview`, method: 'get' }),
+  attachmentDownloadUrl: (id: number) =>
+    request<string>({ url: `/api/approval/attachment/${id}/download-url`, method: 'get' }),
+  attachmentBatchDownload: (ids: number[]) =>
+    request<Blob>({ url: '/api/approval/attachment/batch-download', method: 'post', data: ids, responseType: 'blob' })
 }
 
 export const notifyApi = {
