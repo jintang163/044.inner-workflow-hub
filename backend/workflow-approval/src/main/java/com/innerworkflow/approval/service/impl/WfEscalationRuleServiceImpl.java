@@ -1,5 +1,6 @@
 package com.innerworkflow.approval.service.impl;
 
+import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -16,7 +17,10 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -96,7 +100,19 @@ public class WfEscalationRuleServiceImpl extends ServiceImpl<WfEscalationRuleMap
 
     @Override
     public List<WfEscalationRule> listByProcessAndNode(String processKey, String nodeId) {
+        return filterRulesByPriority(listAllByProcessAndNodeInternal(processKey, nodeId, null));
+    }
+
+    @Override
+    public List<WfEscalationRule> listEnabledRules(String processKey, String nodeId) {
+        return filterRulesByPriority(listAllByProcessAndNodeInternal(processKey, nodeId, 1));
+    }
+
+    private List<WfEscalationRule> listAllByProcessAndNodeInternal(String processKey, String nodeId, Integer enabled) {
         LambdaQueryWrapper<WfEscalationRule> wrapper = new LambdaQueryWrapper<>();
+        if (enabled != null) {
+            wrapper.eq(WfEscalationRule::getEnabled, enabled);
+        }
         wrapper.and(w -> w.eq(WfEscalationRule::getProcessKey, processKey).or().isNull(WfEscalationRule::getProcessKey));
         wrapper.and(w -> w.eq(WfEscalationRule::getNodeId, nodeId).or().isNull(WfEscalationRule::getNodeId));
         wrapper.orderByAsc(WfEscalationRule::getEscalateLevel);
@@ -104,14 +120,44 @@ public class WfEscalationRuleServiceImpl extends ServiceImpl<WfEscalationRuleMap
         return this.list(wrapper);
     }
 
-    @Override
-    public List<WfEscalationRule> listEnabledRules(String processKey, String nodeId) {
-        LambdaQueryWrapper<WfEscalationRule> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(WfEscalationRule::getEnabled, 1);
-        wrapper.and(w -> w.eq(WfEscalationRule::getProcessKey, processKey).or().isNull(WfEscalationRule::getProcessKey));
-        wrapper.and(w -> w.eq(WfEscalationRule::getNodeId, nodeId).or().isNull(WfEscalationRule::getNodeId));
-        wrapper.orderByAsc(WfEscalationRule::getEscalateLevel);
-        wrapper.orderByAsc(WfEscalationRule::getSortOrder);
-        return this.list(wrapper);
+    private List<WfEscalationRule> filterRulesByPriority(List<WfEscalationRule> allRules) {
+        if (allRules == null || allRules.isEmpty()) {
+            return allRules;
+        }
+
+        Map<Integer, WfEscalationRule> resultMap = new LinkedHashMap<>();
+
+        for (WfEscalationRule rule : allRules) {
+            Integer level = rule.getEscalateLevel();
+            if (level == null) {
+                continue;
+            }
+
+            WfEscalationRule existing = resultMap.get(level);
+            if (existing == null) {
+                resultMap.put(level, rule);
+            } else {
+                int existingPriority = getPriority(existing);
+                int newPriority = getPriority(rule);
+                if (newPriority > existingPriority) {
+                    resultMap.put(level, rule);
+                }
+            }
+        }
+
+        return new ArrayList<>(resultMap.values());
+    }
+
+    private int getPriority(WfEscalationRule rule) {
+        boolean hasProcessKey = StrUtil.isNotBlank(rule.getProcessKey());
+        boolean hasNodeId = StrUtil.isNotBlank(rule.getNodeId());
+
+        if (hasProcessKey && hasNodeId) {
+            return 3;
+        } else if (hasProcessKey) {
+            return 2;
+        } else {
+            return 1;
+        }
     }
 }

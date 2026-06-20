@@ -71,7 +71,7 @@ CREATE INDEX IF NOT EXISTS idx_timeout_remind_tenant ON wf_timeout_remind(tenant
 
 -- 5. 初始化默认升级规则
 INSERT IGNORE INTO wf_escalation_rule (rule_name, rule_code, escalate_level, timeout_hours, escalate_type, escalate_action, enabled, sort_order) VALUES
-('一级升级-转交主管', 'ESCALATE_LEVEL_1', 1, 48, 1, 1, 1, 1),
+('一级升级-转交主管', 'ESCALATE_LEVEL_1', 1, 48, 1, 2, 1, 1),
 ('二级升级-通知管理员', 'ESCALATE_LEVEL_2', 2, 72, 4, 3, 1, 2);
 
 -- ============================================================
