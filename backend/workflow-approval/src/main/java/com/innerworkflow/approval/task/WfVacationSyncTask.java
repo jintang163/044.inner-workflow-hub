@@ -1,5 +1,6 @@
 package com.innerworkflow.approval.task;
 
+import com.innerworkflow.approval.service.WfApprovalService;
 import com.innerworkflow.approval.service.WfUserVacationService;
 import com.innerworkflow.approval.vacation.VacationCalendarAdapter;
 import lombok.RequiredArgsConstructor;
@@ -15,6 +16,7 @@ import java.util.Map;
 public class WfVacationSyncTask {
 
     private final WfUserVacationService userVacationService;
+    private final WfApprovalService approvalService;
     private final Map<String, VacationCalendarAdapter> vacationAdapters;
 
     @Scheduled(cron = "0 0 2 * * ?")
@@ -38,8 +40,27 @@ public class WfVacationSyncTask {
     }
 
     @Scheduled(cron = "0 */30 * * * ?")
-    public void syncRecentVacations() {
-        log.debug("开始增量休假数据同步...");
-        log.debug("增量休假数据同步完成");
+    public void syncRecentVacationsAndTransferTasks() {
+        log.info("开始增量休假同步及待办转派...");
+
+        for (Map.Entry<String, VacationCalendarAdapter> entry : vacationAdapters.entrySet()) {
+            VacationCalendarAdapter adapter = entry.getValue();
+            try {
+                if (adapter.isEnabled()) {
+                    log.info("从{}增量同步休假数据", adapter.getSourceName());
+                }
+            } catch (Exception e) {
+                log.error("增量同步休假失败, adapter={}, error={}", adapter.getSourceName(), e.getMessage());
+            }
+        }
+
+        try {
+            int count = approvalService.batchTransferVacationUsers();
+            log.info("休假待办批量转派完成, 转派{}个任务", count);
+        } catch (Exception e) {
+            log.error("休假待办批量转派失败, error={}", e.getMessage(), e);
+        }
+
+        log.info("增量休假同步及待办转派完成");
     }
 }

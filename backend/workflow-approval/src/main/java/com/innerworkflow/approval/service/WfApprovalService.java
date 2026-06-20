@@ -29,6 +29,10 @@ public interface WfApprovalService {
 
     void transferBackTasksForDelegation(Long delegationId);
 
+    void transferExistingTasksForVacation(Long vacationId);
+
+    int batchTransferVacationUsers();
+
     WfProcessDetailVO getProcessDetail(Long instanceId);
 
     String getProcessDiagram(Long instanceId);

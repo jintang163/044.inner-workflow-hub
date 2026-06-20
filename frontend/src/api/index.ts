@@ -256,7 +256,45 @@ export const approvalApi = {
   attachmentDownloadUrl: (id: number) =>
     request<string>({ url: `/api/approval/attachment/${id}/download-url`, method: 'get' }),
   attachmentBatchDownload: (ids: number[]) =>
-    request<Blob>({ url: '/api/approval/attachment/batch-download', method: 'post', data: ids, responseType: 'blob' })
+    request<Blob>({ url: '/api/approval/attachment/batch-download', method: 'post', data: ids, responseType: 'blob' }),
+
+  vacationPage: (params?: any) =>
+    request<PageResult<any>>({ url: '/api/approval/vacation/page', method: 'get', params }),
+  vacationGet: (id: number) =>
+    request<any>({ url: `/api/approval/vacation/${id}`, method: 'get' }),
+  vacationSave: (data: any) =>
+    request<void>({ url: '/api/approval/vacation', method: 'post', data }),
+  vacationUpdate: (data: any) =>
+    request<void>({ url: '/api/approval/vacation', method: 'put', data }),
+  vacationDelete: (id: number) =>
+    request<void>({ url: `/api/approval/vacation/${id}`, method: 'delete' }),
+  vacationCancel: (id: number) =>
+    request<void>({ url: `/api/approval/vacation/cancel/${id}`, method: 'post' }),
+  vacationMyList: (params?: any) =>
+    request<any[]>({ url: '/api/approval/vacation/my/list', method: 'get', params }),
+  vacationMyCurrent: () =>
+    request<any>({ url: '/api/approval/vacation/my/current', method: 'get' }),
+  vacationCheck: (userId: number, time?: string) =>
+    request<boolean>({ url: `/api/approval/vacation/check/${userId}`, method: 'get', params: time ? { time } : undefined }),
+  vacationSync: (sourceType: string) =>
+    request<void>({ url: `/api/approval/vacation/sync/${sourceType}`, method: 'post' }),
+  vacationBatchTransfer: () =>
+    request<number>({ url: '/api/approval/vacation/batch-transfer', method: 'post' }),
+  vacationTransfer: (vacationId: number) =>
+    request<void>({ url: `/api/approval/vacation/transfer/${vacationId}`, method: 'post' }),
+
+  agentConfigPage: (params?: any) =>
+    request<PageResult<any>>({ url: '/api/approval/agent-config/page', method: 'get', params }),
+  agentConfigGet: (id: number) =>
+    request<any>({ url: `/api/approval/agent-config/${id}`, method: 'get' }),
+  agentConfigSave: (data: any) =>
+    request<void>({ url: '/api/approval/agent-config', method: 'post', data }),
+  agentConfigUpdate: (data: any) =>
+    request<void>({ url: '/api/approval/agent-config', method: 'put', data }),
+  agentConfigDelete: (id: number) =>
+    request<void>({ url: `/api/approval/agent-config/${id}`, method: 'delete' }),
+  agentConfigMyList: () =>
+    request<any[]>({ url: '/api/approval/agent-config/my/list', method: 'get' }),
 }
 
 export const notifyApi = {

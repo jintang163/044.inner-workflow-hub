@@ -1506,6 +1506,142 @@ public class WfApprovalServiceImpl implements WfApprovalService {
         }
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void transferExistingTasksForVacation(Long vacationId) {
+        WfUserVacation vacation = userVacationService.getById(vacationId);
+        if (vacation == null) {
+            log.warn("休假记录不存在, vacationId={}", vacationId);
+            return;
+        }
+        if (vacation.getVacationStatus() == null || vacation.getVacationStatus() != 1) {
+            log.warn("休假记录已取消, vacationId={}", vacationId);
+            return;
+        }
+        if (vacation.getAutoDelegate() != null && vacation.getAutoDelegate() == 0) {
+            log.info("休假记录未开启自动委托, vacationId={}", vacationId);
+            return;
+        }
+
+        Long agentUserId = null;
+        if (vacation.getAgentUserId() != null) {
+            agentUserId = vacation.getAgentUserId();
+        } else {
+            agentUserId = agentConfigService.getDefaultAgentUserId(vacation.getUserId(), 2, null);
+            if (agentUserId == null) {
+                agentUserId = agentConfigService.getDefaultAgentUserId(vacation.getUserId(), 1, null);
+            }
+        }
+        if (agentUserId == null) {
+            log.warn("休假记录未找到代理人, vacationId={}, userId={}", vacationId, vacation.getUserId());
+            return;
+        }
+
+        LoginUserDTO originUser = SecurityUtils.getCurrentUserOpt().orElse(null);
+        try {
+            LoginUserDTO vacationUser = LoginUserDTO.builder()
+                    .userId(vacation.getUserId())
+                    .realName(vacation.getUserName())
+                    .tenantId(vacation.getTenantId())
+                    .build();
+            SecurityUtils.setCurrentUser(vacationUser);
+
+            List<WfApprovalTask> todoTasks = approvalTaskService.listTodoByUserId(vacation.getUserId());
+            if (todoTasks == null || todoTasks.isEmpty()) {
+                log.info("休假用户没有待办任务, userId={}", vacation.getUserId());
+                return;
+            }
+
+            SysUser delegatorUser = sysUserService.getById(vacation.getUserId());
+            SysUser agentUser = sysUserService.getById(agentUserId);
+            String delegatorName = delegatorUser != null ? delegatorUser.getNickname() : "";
+            String agentName = agentUser != null ? agentUser.getNickname() : "";
+            String vacationTitle = vacation.getVacationTitle() != null ? vacation.getVacationTitle() : "休假";
+            String transferReason = vacationTitle + "自动委托: " + delegatorName + " -> " + agentName;
+
+            int successCount = 0;
+            for (WfApprovalTask todoTask : todoTasks) {
+                try {
+                    Task flowableTask = taskService.createTaskQuery()
+                            .taskId(todoTask.getFlowableTaskId())
+                            .singleResult();
+                    if (flowableTask == null) {
+                        continue;
+                    }
+
+                    handleVacationAutoDelegate(todoTask, flowableTask);
+                    successCount++;
+                } catch (Exception e) {
+                    log.error("休假批量转移任务失败, taskId={}, error={}", todoTask.getId(), e.getMessage(), e);
+                }
+            }
+
+            log.info("休假批量转派完成, vacationId={}, userId={}, 共{}个任务, 成功{}个",
+                    vacationId, vacation.getUserId(), todoTasks.size(), successCount);
+        } finally {
+            if (originUser != null) {
+                SecurityUtils.setCurrentUser(originUser);
+            } else {
+                SecurityUtils.clearCurrentUser();
+            }
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int batchTransferVacationUsers() {
+        log.info("开始批量扫描休假用户的待办任务...");
+
+        List<WfUserVacation> activeVacations = userVacationService.list(
+                new LambdaQueryWrapper<WfUserVacation>()
+                        .eq(WfUserVacation::getVacationStatus, 1)
+                        .eq(WfUserVacation::getAutoDelegate, 1)
+                        .le(WfUserVacation::getStartTime, LocalDateTime.now())
+                        .ge(WfUserVacation::getEndTime, LocalDateTime.now()));
+
+        if (activeVacations == null || activeVacations.isEmpty()) {
+            log.info("当前无生效的自动委托休假记录");
+            return 0;
+        }
+
+        Set<Long> processedUserIds = new HashSet<>();
+        int totalTransferred = 0;
+
+        for (WfUserVacation vacation : activeVacations) {
+            if (processedUserIds.contains(vacation.getUserId())) {
+                continue;
+            }
+            processedUserIds.add(vacation.getUserId());
+
+            try {
+                List<WfApprovalTask> todoTasks = approvalTaskService.listTodoByUserId(vacation.getUserId());
+                if (todoTasks == null || todoTasks.isEmpty()) {
+                    continue;
+                }
+
+                for (WfApprovalTask todoTask : todoTasks) {
+                    try {
+                        Task flowableTask = taskService.createTaskQuery()
+                                .taskId(todoTask.getFlowableTaskId())
+                                .singleResult();
+                        if (flowableTask != null) {
+                            handleVacationAutoDelegate(todoTask, flowableTask);
+                            totalTransferred++;
+                        }
+                    } catch (Exception e) {
+                        log.error("休假批量转派单个任务失败, taskId={}, error={}", todoTask.getId(), e.getMessage());
+                    }
+                }
+            } catch (Exception e) {
+                log.error("处理休假用户待办失败, userId={}, error={}", vacation.getUserId(), e.getMessage());
+            }
+        }
+
+        log.info("休假用户待办批量转派完成, 共处理{}个用户, 转派{}个任务",
+                processedUserIds.size(), totalTransferred);
+        return totalTransferred;
+    }
+
     private void handleParallelGatewayRejection(WfProcessInstance instance, Task currentTask,
                                                 Long userId, WfApprovalActionDTO dto) {
         if (instance == null) {

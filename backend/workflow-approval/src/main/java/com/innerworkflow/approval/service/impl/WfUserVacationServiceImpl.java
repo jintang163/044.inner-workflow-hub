@@ -11,6 +11,8 @@ import com.innerworkflow.approval.entity.WfUserVacation;
 import com.innerworkflow.approval.mapper.WfUserVacationMapper;
 import com.innerworkflow.approval.service.WfUserVacationService;
 import com.innerworkflow.approval.vacation.VacationCalendarAdapter;
+import com.innerworkflow.auth.entity.SysUser;
+import com.innerworkflow.auth.service.SysUserService;
 import com.innerworkflow.common.context.TenantContext;
 import com.innerworkflow.common.exception.BusinessException;
 import com.innerworkflow.common.util.SecurityUtils;
@@ -32,6 +34,7 @@ import java.util.stream.Collectors;
 public class WfUserVacationServiceImpl extends ServiceImpl<WfUserVacationMapper, WfUserVacation> implements WfUserVacationService {
 
     private final Map<String, VacationCalendarAdapter> vacationAdapters;
+    private final SysUserService sysUserService;
 
     @Override
     public IPage<WfUserVacation> page(WfUserVacationQueryDTO queryDTO) {
@@ -108,28 +111,16 @@ public class WfUserVacationServiceImpl extends ServiceImpl<WfUserVacationMapper,
             return null;
         }
 
-        List<WfUserVacation> allCurrentVacations = new ArrayList<>();
+        LocalDateTime now = LocalDateTime.now();
+        LambdaQueryWrapper<WfUserVacation> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(WfUserVacation::getUserId, userId);
+        wrapper.eq(WfUserVacation::getVacationStatus, 1);
+        wrapper.le(WfUserVacation::getStartTime, now);
+        wrapper.ge(WfUserVacation::getEndTime, now);
+        wrapper.orderByAsc(WfUserVacation::getStartTime);
+        wrapper.last("LIMIT 1");
 
-        for (VacationCalendarAdapter adapter : vacationAdapters.values()) {
-            try {
-                if (adapter.isEnabled()) {
-                    WfUserVacation vacation = adapter.getCurrentVacation(userId);
-                    if (vacation != null) {
-                        allCurrentVacations.add(vacation);
-                    }
-                }
-            } catch (Exception e) {
-                log.warn("获取当前休假失败, adapter={}, userId={}, error={}",
-                        adapter.getSourceName(), userId, e.getMessage());
-            }
-        }
-
-        if (allCurrentVacations.isEmpty()) {
-            return null;
-        }
-
-        allCurrentVacations.sort(Comparator.comparing(WfUserVacation::getStartTime));
-        return allCurrentVacations.get(0);
+        return this.getOne(wrapper);
     }
 
     @Override
@@ -138,18 +129,14 @@ public class WfUserVacationServiceImpl extends ServiceImpl<WfUserVacationMapper,
             return false;
         }
 
-        for (VacationCalendarAdapter adapter : vacationAdapters.values()) {
-            try {
-                if (adapter.isEnabled() && adapter.isUserOnVacation(userId, time)) {
-                    return true;
-                }
-            } catch (Exception e) {
-                log.warn("检查休假状态失败, adapter={}, userId={}, error={}",
-                        adapter.getSourceName(), userId, e.getMessage());
-            }
-        }
+        LambdaQueryWrapper<WfUserVacation> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(WfUserVacation::getUserId, userId);
+        wrapper.eq(WfUserVacation::getVacationStatus, 1);
+        wrapper.le(WfUserVacation::getStartTime, time);
+        wrapper.ge(WfUserVacation::getEndTime, time);
 
-        return false;
+        Long count = this.count(wrapper);
+        return count != null && count > 0;
     }
 
     @Override
@@ -191,8 +178,36 @@ public class WfUserVacationServiceImpl extends ServiceImpl<WfUserVacationMapper,
 
     @Override
     public void syncAllVacations(String sourceType) {
-        // 可扩展：从用户系统获取所有用户，批量同步
-        log.warn("全量休假同步暂未完全实现, sourceType={}", sourceType);
+        VacationCalendarAdapter adapter = getAdapterBySourceType(sourceType);
+        if (adapter == null || !adapter.isEnabled()) {
+            log.warn("指定的休假数据源未启用或不存在, sourceType={}", sourceType);
+            return;
+        }
+
+        try {
+            List<SysUser> allUsers = sysUserService.list();
+            if (allUsers == null || allUsers.isEmpty()) {
+                log.warn("未找到任何用户, 跳过全量同步");
+                return;
+            }
+
+            List<Long> userIds = allUsers.stream()
+                    .map(SysUser::getId)
+                    .collect(Collectors.toList());
+
+            LocalDateTime startTime = LocalDateTime.now().minusDays(1);
+            LocalDateTime endTime = LocalDateTime.now().plusDays(30);
+
+            List<WfUserVacation> vacations = adapter.syncUsersVacation(userIds, startTime, endTime);
+            if (vacations != null && !vacations.isEmpty()) {
+                saveOrUpdateSyncVacations(vacations, sourceType);
+                log.info("从{}全量同步休假成功, 共{}条", adapter.getSourceName(), vacations.size());
+            } else {
+                log.info("从{}全量同步休假完成, 无新增记录", adapter.getSourceName());
+            }
+        } catch (Exception e) {
+            log.error("从{}全量同步休假失败, error={}", adapter.getSourceName(), e.getMessage(), e);
+        }
     }
 
     private VacationCalendarAdapter getAdapterBySourceType(String sourceType) {

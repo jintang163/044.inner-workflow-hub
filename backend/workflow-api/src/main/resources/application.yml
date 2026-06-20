@@ -177,6 +177,24 @@ workflow:
       corp-id: your-wecom-corp-id
       agent-id: your-agent-id
       secret: your-wecom-secret
+
+  vacation:
+    dingtalk:
+      enabled: false
+      app-key: ${workflow.notify.dingtalk.app-key}
+      app-secret: ${workflow.notify.dingtalk.app-secret}
+      corp-id: your-dingtalk-corp-id
+      sync-days: 30
+      api-call-interval: 100
+    feishu:
+      enabled: false
+      app-id: your-feishu-app-id
+      app-secret: your-feishu-app-secret
+    outlook:
+      enabled: false
+      client-id: your-outlook-client-id
+      client-secret: your-outlook-client-secret
+      tenant-id: your-outlook-tenant-id
   file:
     upload-path: ./uploads/
     url-prefix: /static/

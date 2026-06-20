@@ -23,6 +23,7 @@ import java.util.List;
 public class WfUserVacationController {
 
     private final WfUserVacationService userVacationService;
+    private final WfApprovalService approvalService;
 
     @Operation(summary = "分页查询休假记录")
     @GetMapping("/page")
@@ -111,6 +112,19 @@ public class WfUserVacationController {
             @PathVariable Long userId,
             @PathVariable String sourceType) {
         userVacationService.syncVacationFromSource(userId, sourceType);
+        return R.success();
+    }
+
+    @Operation(summary = "手动触发休假待办批量转派")
+    @PostMapping("/batch-transfer")
+    public R<Integer> batchTransferVacationTasks() {
+        return R.success(approvalService.batchTransferVacationUsers());
+    }
+
+    @Operation(summary = "手动触发指定休假记录的待办转派")
+    @PostMapping("/transfer/{vacationId}")
+    public R<Void> transferVacationTasks(@PathVariable Long vacationId) {
+        approvalService.transferExistingTasksForVacation(vacationId);
         return R.success();
     }
 }
