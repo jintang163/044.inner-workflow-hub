@@ -75,6 +75,8 @@ public class WfApprovalServiceImpl implements WfApprovalService {
     private final WfProcessInstanceRelationService processInstanceRelationService;
     private final WfDelegationService delegationService;
     private final WfTransferRecordService transferRecordService;
+    private final WfUserVacationService userVacationService;
+    private final WfAgentConfigService agentConfigService;
     private final SysUserService sysUserService;
     private final ApplicationEventPublisher eventPublisher;
     private final WfFormDraftService formDraftService;
@@ -1024,10 +1026,129 @@ public class WfApprovalServiceImpl implements WfApprovalService {
                 sendTransferNotify(newTask, delegation.getDelegatorId(),
                         delegation.getDelegateeId(),
                         "委托自动转审: " + delegation.getDelegationReason());
+            } else {
+                handleVacationAutoDelegate(approvalTask, flowableTask);
             }
         } catch (Exception e) {
             log.error("处理委托自动转审失败, taskId={}, error={}", approvalTask.getId(), e.getMessage(), e);
         }
+    }
+
+    private void handleVacationAutoDelegate(WfApprovalTask approvalTask, Task flowableTask) {
+        if (approvalTask.getAssigneeId() == null) {
+            return;
+        }
+
+        try {
+            WfUserVacation currentVacation = userVacationService.getCurrentVacation(approvalTask.getAssigneeId());
+            if (currentVacation == null) {
+                return;
+            }
+
+            if (currentVacation.getAutoDelegate() != null && currentVacation.getAutoDelegate() == 0) {
+                log.info("审批人休假但未开启自动委托, taskId={}, userId={}",
+                        approvalTask.getId(), approvalTask.getAssigneeId());
+                return;
+            }
+
+            Long agentUserId = resolveAgentUserId(approvalTask, currentVacation);
+            if (agentUserId == null) {
+                log.warn("审批人休假但未找到有效代理人, taskId={}, userId={}",
+                        approvalTask.getId(), approvalTask.getAssigneeId());
+                return;
+            }
+
+            SysUser delegatorUser = sysUserService.getById(approvalTask.getAssigneeId());
+            SysUser agentUser = sysUserService.getById(agentUserId);
+            String delegatorName = delegatorUser != null ? delegatorUser.getNickname() : "";
+            String agentName = agentUser != null ? agentUser.getNickname() : "";
+            String vacationTitle = currentVacation.getVacationTitle();
+            if (vacationTitle == null || vacationTitle.isEmpty()) {
+                vacationTitle = "休假";
+            }
+            String transferReason = vacationTitle + "自动委托: " + delegatorName + " -> " + agentName;
+
+            log.info("检测到审批人休假, 自动转派任务, taskId={}, delegatorId={}, agentId={}",
+                    approvalTask.getId(), approvalTask.getAssigneeId(), agentUserId);
+
+            taskService.setAssignee(flowableTask.getId(), agentUserId.toString());
+
+            approvalTask.setTaskStatus(TaskStatusEnum.TRANSFERRED.getCode());
+            approvalTask.setAction(TaskActionEnum.TRANSFER.getCode());
+            approvalTask.setActionRemark(transferReason);
+            approvalTask.setActionUserId(agentUserId);
+            approvalTask.setActionTime(LocalDateTime.now());
+            approvalTaskService.updateById(approvalTask);
+
+            WfApprovalTask newTask = new WfApprovalTask();
+            newTask.setTaskNo(generateTaskNo());
+            newTask.setInstanceId(approvalTask.getInstanceId());
+            newTask.setFlowableTaskId(flowableTask.getId());
+            newTask.setFlowableExecutionId(flowableTask.getExecutionId());
+            newTask.setProcessKey(approvalTask.getProcessKey());
+            newTask.setNodeId(approvalTask.getNodeId());
+            newTask.setNodeName(approvalTask.getNodeName());
+            newTask.setNodeType(approvalTask.getNodeType());
+            newTask.setApproveType(approvalTask.getApproveType());
+            newTask.setMultiInstanceFlag(approvalTask.getMultiInstanceFlag());
+            newTask.setAssigneeId(agentUserId);
+            newTask.setAssignTime(LocalDateTime.now());
+            newTask.setTaskStatus(TaskStatusEnum.PENDING.getCode());
+            newTask.setSourceType(5);
+            newTask.setSourceTaskId(approvalTask.getId());
+            approvalTaskService.save(newTask);
+
+            WfTaskRelation relation = new WfTaskRelation();
+            relation.setParentTaskId(approvalTask.getId());
+            relation.setChildTaskId(newTask.getId());
+            relation.setRelationType(3);
+            relation.setOperatorId(approvalTask.getAssigneeId());
+            taskRelationService.save(relation);
+
+            saveApprovalHistory(approvalTask.getInstanceId(), null, flowableTask.getTaskDefinitionKey(),
+                    flowableTask.getName(),
+                    HistoryActivityTypeEnum.TRANSFER.getCode(),
+                    approvalTask.getAssigneeId(), delegatorName,
+                    agentUserId, agentName,
+                    null, null,
+                    transferReason,
+                    null, null, null, LocalDateTime.now());
+
+            transferRecordService.createTransferRecord(
+                    approvalTask.getInstanceId(),
+                    approvalTask.getId(),
+                    TransferTypeEnum.VACATION.getCode(),
+                    approvalTask.getAssigneeId(),
+                    delegatorName,
+                    agentUserId,
+                    agentName,
+                    transferReason,
+                    currentVacation.getId()
+            );
+
+            sendTransferNotify(newTask, approvalTask.getAssigneeId(),
+                    agentUserId,
+                    transferReason);
+
+        } catch (Exception e) {
+            log.error("处理休假自动转派失败, taskId={}, error={}", approvalTask.getId(), e.getMessage(), e);
+        }
+    }
+
+    private Long resolveAgentUserId(WfApprovalTask approvalTask, WfUserVacation vacation) {
+        if (vacation.getAgentUserId() != null) {
+            return vacation.getAgentUserId();
+        }
+
+        Long agentUserId = agentConfigService.getDefaultAgentUserId(
+                approvalTask.getAssigneeId(), 2, approvalTask.getProcessKey());
+        if (agentUserId != null) {
+            return agentUserId;
+        }
+
+        agentUserId = agentConfigService.getDefaultAgentUserId(
+                approvalTask.getAssigneeId(), 1, approvalTask.getProcessKey());
+        return agentUserId;
     }
 
     private Long parseAssigneeId(String assignee) {
