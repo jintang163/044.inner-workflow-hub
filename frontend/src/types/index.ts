@@ -160,6 +160,7 @@ export interface WfApprovalHistoryVO {
 export * from './form'
 export * from './ai'
 export * from './dict'
+export * from './redoc'
 
 export interface NodeConfig {
   nodeId: string

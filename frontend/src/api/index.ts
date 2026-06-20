@@ -57,6 +57,15 @@ import {
   WfDataSourceConfigVO,
   DictOptionItem
 } from '@/types/dict'
+import {
+  WfRedocTemplateVO,
+  WfRedocTemplateSaveDTO,
+  WfRedocGenerateDTO,
+  WfRedocGeneratedVO,
+  WfRedocBatchDTO,
+  WfSealConfigVO,
+  WfSealConfigSaveDTO
+} from '@/types/redoc'
 
 export const authApi = {
   login: (data: LoginDTO) => request<LoginVO>({ url: '/auth/login', method: 'post', data }),
@@ -362,6 +371,73 @@ export const dataSourceApi = {
     request<void>({ url: `/system/datasource/cache/refresh/${sourceCode}`, method: 'post' })
 }
 
+export const redocApi = {
+  templateList: (category?: string, processKey?: string) =>
+    request<WfRedocTemplateVO[]>({
+      url: '/approval/redoc/template/list',
+      method: 'get',
+      params: { category, processKey }
+    }),
+  templatePage: (current: number, size: number, keyword?: string, category?: string) =>
+    request<PageResult<WfRedocTemplateVO>>({
+      url: '/approval/redoc/template/page',
+      method: 'get',
+      params: { current, size, keyword, category }
+    }),
+  templateDetail: (id: number) =>
+    request<WfRedocTemplateVO>({ url: `/approval/redoc/template/${id}`, method: 'get' }),
+  templateSave: (data: WfRedocTemplateSaveDTO) =>
+    request<WfRedocTemplateVO>({ url: '/approval/redoc/template', method: 'post', data }),
+  templateRemove: (id: number) =>
+    request<void>({ url: `/approval/redoc/template/${id}`, method: 'delete' }),
+  templatePlaceholders: (id: number) =>
+    request<string[]>({ url: `/approval/redoc/template/${id}/placeholders`, method: 'get' }),
+
+  generate: (data: WfRedocGenerateDTO) =>
+    request<WfRedocGeneratedVO>({ url: '/approval/redoc/generate', method: 'post', data }),
+
+  listByInstance: (instanceNo: string) =>
+    request<WfRedocGeneratedVO[]>({
+      url: '/approval/redoc/generated/list',
+      method: 'get',
+      params: { instanceNo }
+    }),
+  pageGenerated: (current: number, size: number, instanceNo?: string, templateId?: string) =>
+    request<PageResult<WfRedocGeneratedVO>>({
+      url: '/approval/redoc/generated/page',
+      method: 'get',
+      params: { current, size, instanceNo, templateId }
+    }),
+  generatedDetail: (id: number) =>
+    request<WfRedocGeneratedVO>({ url: `/approval/redoc/generated/${id}`, method: 'get' }),
+  markPrinted: (id: number) =>
+    request<boolean>({ url: `/approval/redoc/generated/${id}/printed`, method: 'post' }),
+  markDownloaded: (id: number) =>
+    request<boolean>({ url: `/approval/redoc/generated/${id}/downloaded`, method: 'post' }),
+
+  batchPrint: (data: WfRedocBatchDTO) =>
+    request<Blob>({ url: '/approval/redoc/batch/print', method: 'post', data, responseType: 'blob' }),
+  batchDownload: (data: WfRedocBatchDTO) =>
+    request<Blob>({ url: '/approval/redoc/batch/download', method: 'post', data, responseType: 'blob' })
+}
+
+export const sealApi = {
+  list: (sealType?: number) =>
+    request<WfSealConfigVO[]>({ url: '/approval/seal/list', method: 'get', params: { sealType } }),
+  page: (current: number, size: number, keyword?: string, sealType?: number) =>
+    request<PageResult<WfSealConfigVO>>({
+      url: '/approval/seal/page',
+      method: 'get',
+      params: { current, size, keyword, sealType }
+    }),
+  detail: (id: number) =>
+    request<WfSealConfigVO>({ url: `/approval/seal/${id}`, method: 'get' }),
+  save: (data: WfSealConfigSaveDTO) =>
+    request<WfSealConfigVO>({ url: '/approval/seal', method: 'post', data }),
+  remove: (id: number) =>
+    request<void>({ url: `/approval/seal/${id}`, method: 'delete' })
+}
+
 const api = {
   auth: authApi,
   user: userApi,
@@ -375,7 +451,9 @@ const api = {
   tenant: tenantApi,
   ai: aiApi,
   dict: dictApi,
-  dataSource: dataSourceApi
+  dataSource: dataSourceApi,
+  redoc: redocApi,
+  seal: sealApi
 }
 
 export default api

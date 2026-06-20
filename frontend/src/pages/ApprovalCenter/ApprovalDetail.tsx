@@ -21,7 +21,8 @@ import {
   List,
   Divider,
   Alert,
-  notification
+  notification,
+  Table
 } from 'antd'
 import {
   ArrowLeftOutlined,
@@ -31,7 +32,9 @@ import {
   ExclamationCircleOutlined,
   ReloadOutlined,
   WarningOutlined,
-  SyncOutlined
+  SyncOutlined,
+  FileDoneOutlined,
+  FilePdfOutlined
 } from '@ant-design/icons'
 import ApprovalTimeline from './components/ApprovalTimeline'
 import FlowDiagram from './components/FlowDiagram'
@@ -39,12 +42,14 @@ import ApprovalActionBar from './components/ApprovalActionBar'
 import MultiInstanceSignCard from './components/MultiInstanceSignCard'
 import ApprovalTrackingMap from './components/ApprovalTrackingMap'
 import AiRecommendationCard from '@/components/business/AiRecommendationCard'
-import { approvalApi, formApi, aiApi } from '@/api'
+import { approvalApi, formApi, aiApi, redocApi } from '@/api'
 import type { ProcessInstanceVO, ApprovalHistoryVO, ApprovalTaskVO, MultiInstanceSignVO, TrackingMapVO, ApprovalStatusUpdateVO, AttachmentVO } from '@/types/approval'
 import type { FormilySchema } from '@/types/form'
 import type { AiRecommendationVO } from '@/types/ai'
+import type { WfRedocGeneratedVO } from '@/types/redoc'
 import FormRenderer from '@/components/FormRenderer'
 import AttachmentList from '@/components/business/AttachmentList'
+import { RedocPreviewModal, RedocGenerateModal, RedocBatchPanel } from '@/components/business/Redoc'
 import { useWebSocket } from '@/hooks/useWebSocket'
 import { WS_BASE_URL, RESULT_CODE_VERSION_CONFLICT } from '@/config/websocket'
 import dayjs from 'dayjs'
@@ -109,6 +114,11 @@ const ApprovalDetail: React.FC = () => {
   const [version, setVersion] = useState<number | undefined>()
   const [remoteUpdateAlert, setRemoteUpdateAlert] = useState<{ show: boolean; operatorName?: string; actionTypeName?: string }>({ show: false })
   const [attachments, setAttachments] = useState<AttachmentVO[]>([])
+  const [redocList, setRedocList] = useState<WfRedocGeneratedVO[]>([])
+  const [redocGenerateOpen, setRedocGenerateOpen] = useState(false)
+  const [redocPreviewOpen, setRedocPreviewOpen] = useState(false)
+  const [redocPreviewItem, setRedocPreviewItem] = useState<WfRedocGeneratedVO | null>(null)
+  const [redocBatchOpen, setRedocBatchOpen] = useState(false)
   const notificationShownRef = useRef(false)
 
   const { subscribe, unsubscribe } = useWebSocket({
@@ -198,6 +208,13 @@ const ApprovalDetail: React.FC = () => {
         setAttachments(attRes || [])
       } catch (_) {
         setAttachments([])
+      }
+
+      try {
+        const redocRes = await redocApi.listByInstance(instanceNo)
+        setRedocList(redocRes || [])
+      } catch (_) {
+        setRedocList([])
       }
 
       const newVersion = instRes?.version ?? currentTask?.version
@@ -566,6 +583,25 @@ const ApprovalDetail: React.FC = () => {
                     撤回申请
                   </Button>
                 )}
+                {(instance?.instanceStatus === 2) && (
+                  <>
+                    <Button
+                      icon={<FilePdfOutlined />}
+                      type="primary"
+                      onClick={() => setRedocBatchOpen(true)}
+                    >
+                      批量打印/下载
+                    </Button>
+                    <Button
+                      icon={<FileDoneOutlined />}
+                      type="primary"
+                      danger
+                      onClick={() => setRedocGenerateOpen(true)}
+                    >
+                      生成红头文件
+                    </Button>
+                  </>
+                )}
                 <Button icon={<ReloadOutlined />} onClick={loadData}>
                   刷新
                 </Button>
@@ -699,6 +735,20 @@ const ApprovalDetail: React.FC = () => {
                     )
                   }] : []),
                   {
+                    key: 'redoc',
+                    label: (
+                      <Space size={4}>
+                        <span>📄</span>
+                        <span>红头文件</span>
+                        {redocList.length > 0 && (
+                          <Tag color="red" style={{ marginLeft: 4, fontSize: 11 }}>
+                            {redocList.length}
+                          </Tag>
+                        )}
+                      </Space>
+                    )
+                  },
+                  {
                     key: 'tracking',
                     label: (
                       <Space size={4}>
@@ -737,6 +787,126 @@ const ApprovalDetail: React.FC = () => {
                       <MultiInstanceSignCard key={signData.nodeId || index} signData={signData} />
                     ))}
                   </Space>
+                )}
+                {activeTab === 'redoc' && (
+                  <div>
+                    {instance?.instanceStatus !== 2 && (
+                      <Alert
+                        type="info"
+                        showIcon
+                        message="提示"
+                        description="红头文件需在审批流程完成后生成"
+                        style={{ marginBottom: 16 }}
+                      />
+                    )}
+                    <div style={{ marginBottom: 16 }}>
+                      <Space>
+                        <Button
+                          type="primary"
+                          danger
+                          icon={<FileDoneOutlined />}
+                          onClick={() => setRedocGenerateOpen(true)}
+                          disabled={instance?.instanceStatus !== 2}
+                        >
+                          生成红头文件
+                        </Button>
+                        <Button
+                          icon={<FilePdfOutlined />}
+                          onClick={() => setRedocBatchOpen(true)}
+                          disabled={redocList.length === 0}
+                        >
+                          批量打印/下载
+                        </Button>
+                      </Space>
+                    </div>
+                    {redocList.length === 0 ? (
+                      <Empty
+                        image={Empty.PRESENTED_IMAGE_SIMPLE}
+                        description="暂无红头文件"
+                      />
+                    ) : (
+                      <Table
+                        rowKey="id"
+                        size="small"
+                        dataSource={redocList}
+                        columns={[
+                          { title: '文件标题', dataIndex: 'fileTitle', ellipsis: true, render: (v: string) => <Text strong>{v}</Text> },
+                          { title: '模板', dataIndex: 'templateName', width: 140 },
+                          { title: '文号', dataIndex: 'approvalNo', width: 160, render: (v: string) => v || '-' },
+                          {
+                            title: '盖章/签名', width: 140,
+                            render: (_: any, r: WfRedocGeneratedVO) => (
+                              <Space>
+                                {r.sealApplied === 1 && <Tag color="green">已盖章</Tag>}
+                                {r.signatureApplied === 1 && <Tag color="blue">国密签名</Tag>}
+                                {r.sealApplied !== 1 && r.signatureApplied !== 1 && <Tag>未签章</Tag>}
+                              </Space>
+                            )
+                          },
+                          { title: '生成人', dataIndex: 'generateByName', width: 100 },
+                          {
+                            title: '生成时间', width: 160,
+                            dataIndex: 'generateTime',
+                            render: (v: string) => v ? dayjs(v).format('YYYY-MM-DD HH:mm') : '-'
+                          },
+                          { title: '打印', dataIndex: 'printCount', width: 80, render: (v: number) => `${v || 0}次` },
+                          {
+                            title: '操作', width: 200,
+                            render: (_: any, r: WfRedocGeneratedVO) => (
+                              <Space size={4}>
+                                <Button
+                                  type="link"
+                                  size="small"
+                                  disabled={!r.pdfFileId}
+                                  onClick={() => {
+                                    setRedocPreviewItem(r)
+                                    setRedocPreviewOpen(true)
+                                  }}
+                                >
+                                  预览
+                                </Button>
+                                <Button
+                                  type="link"
+                                  size="small"
+                                  disabled={!r.pdfFileId}
+                                  onClick={() => {
+                                    redocApi.markDownloaded(r.id)
+                                    const a = document.createElement('a')
+                                    a.href = r.pdfDownloadUrl!
+                                    a.download = r.pdfFileName || '红头文件.pdf'
+                                    a.target = '_blank'
+                                    document.body.appendChild(a)
+                                    a.click()
+                                    document.body.removeChild(a)
+                                  }}
+                                >
+                                  下载PDF
+                                </Button>
+                                <Button
+                                  type="link"
+                                  size="small"
+                                  disabled={!r.wordFileId}
+                                  onClick={() => {
+                                    redocApi.markDownloaded(r.id)
+                                    const a = document.createElement('a')
+                                    a.href = r.wordDownloadUrl!
+                                    a.download = r.wordFileName || '红头文件.docx'
+                                    a.target = '_blank'
+                                    document.body.appendChild(a)
+                                    a.click()
+                                    document.body.removeChild(a)
+                                  }}
+                                >
+                                  下载WORD
+                                </Button>
+                              </Space>
+                            )
+                          }
+                        ]}
+                        pagination={{ pageSize: 10, showSizeChanger: false }}
+                      />
+                    )}
+                  </div>
                 )}
                 {activeTab === 'tracking' && (
                   <ApprovalTrackingMap
@@ -807,6 +977,27 @@ const ApprovalDetail: React.FC = () => {
             </Form.Item>
           </Form>
         </Modal>
+
+        <RedocGenerateModal
+          open={redocGenerateOpen}
+          instanceNo={instanceNo}
+          processKey={instance?.processKey}
+          defaultTitle={instance?.title}
+          onCancel={() => setRedocGenerateOpen(false)}
+          onSuccess={() => {
+            loadData()
+          }}
+        />
+        <RedocPreviewModal
+          open={redocPreviewOpen}
+          generated={redocPreviewItem}
+          onCancel={() => setRedocPreviewOpen(false)}
+        />
+        <RedocBatchPanel
+          open={redocBatchOpen}
+          instanceNo={instanceNo}
+          onCancel={() => setRedocBatchOpen(false)}
+        />
       </div>
     </Spin>
   )
