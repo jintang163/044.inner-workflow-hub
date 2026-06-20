@@ -26,6 +26,10 @@ public interface WfRedocTemplateService {
 
     WfRedocGeneratedVO generate(WfRedocGenerateDTO dto);
 
+    WfRedocGeneratedVO generateWithoutCheck(WfRedocGenerateDTO dto);
+
+    List<WfRedocGeneratedVO> autoGenerateForInstance(String instanceNo);
+
     List<WfRedocGeneratedVO> listByInstance(String instanceNo);
 
     IPage<WfRedocGeneratedVO> pageGenerated(long current, long size, String instanceNo, String templateId);

@@ -39,6 +39,8 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import static com.innerworkflow.common.enums.InstanceStatusEnum.APPROVED;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -117,6 +119,59 @@ public class WfRedocTemplateServiceImpl extends ServiceImpl<WfRedocTemplateMappe
     @Override
     @Transactional(rollbackFor = Exception.class)
     public WfRedocGeneratedVO generate(WfRedocGenerateDTO dto) {
+        return doGenerate(dto, true);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public WfRedocGeneratedVO generateWithoutCheck(WfRedocGenerateDTO dto) {
+        return doGenerate(dto, false);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public List<WfRedocGeneratedVO> autoGenerateForInstance(String instanceNo) {
+        if (StrUtil.isBlank(instanceNo)) return Collections.emptyList();
+        WfProcessInstance instance = processInstanceService.getByInstanceNo(instanceNo);
+        if (instance == null) return Collections.emptyList();
+        if (!APPROVED.getCode().equals(instance.getInstanceStatus())) {
+            log.warn("审批单未完成，不自动生成红头文件: instanceNo={}, status={}",
+                    instanceNo, instance.getInstanceStatus());
+            return Collections.emptyList();
+        }
+
+        LambdaQueryWrapper<WfRedocTemplate> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(WfRedocTemplate::getStatus, 1);
+        wrapper.eq(WfRedocTemplate::getAutoGenerate, 1);
+        wrapper.and(w -> w.isNull(WfRedocTemplate::getProcessKey)
+                .or().eq(WfRedocTemplate::getProcessKey, instance.getProcessKey()));
+        wrapper.orderByAsc(WfRedocTemplate::getId);
+        List<WfRedocTemplate> templates = list(wrapper);
+        if (templates.isEmpty()) {
+            log.info("未找到需要自动生成的红头模板: processKey={}", instance.getProcessKey());
+            return Collections.emptyList();
+        }
+
+        List<WfRedocGeneratedVO> result = new ArrayList<>();
+        for (WfRedocTemplate t : templates) {
+            try {
+                WfRedocGenerateDTO dto = new WfRedocGenerateDTO();
+                dto.setInstanceNo(instanceNo);
+                dto.setTemplateId(t.getId());
+                dto.setFileTitle(instance.getTitle() != null ? instance.getTitle() : "红头文件");
+                dto.setApprovalNo(instance.getInstanceNo());
+                WfRedocGeneratedVO vo = doGenerate(dto, false);
+                result.add(vo);
+                log.info("自动生成红头文件成功: template={}, instanceNo={}", t.getTemplateCode(), instanceNo);
+            } catch (Exception e) {
+                log.error("自动生成红头文件失败: template={}, instanceNo={}, error={}",
+                        t.getTemplateCode(), instanceNo, e.getMessage(), e);
+            }
+        }
+        return result;
+    }
+
+    private WfRedocGeneratedVO doGenerate(WfRedocGenerateDTO dto, boolean checkApproved) {
         WfRedocTemplate template = getById(dto.getTemplateId());
         if (template == null) throw new BusinessException(ResultCode.NOT_FOUND, "模板不存在");
         if (template.getStatus() != null && template.getStatus() == 0) {
@@ -126,6 +181,12 @@ public class WfRedocTemplateServiceImpl extends ServiceImpl<WfRedocTemplateMappe
         WfProcessInstance instance = null;
         if (StrUtil.isNotBlank(dto.getInstanceNo())) {
             instance = processInstanceService.getByInstanceNo(dto.getInstanceNo());
+            if (instance == null) {
+                throw new BusinessException(ResultCode.PARAM_ERROR, "审批单不存在");
+            }
+            if (checkApproved && !APPROVED.getCode().equals(instance.getInstanceStatus())) {
+                throw new BusinessException(ResultCode.PARAM_ERROR, "审批单未完成，暂不能生成红头文件");
+            }
         }
 
         int outputFormat = dto.getOutputFormat() != null ? dto.getOutputFormat()
@@ -138,6 +199,11 @@ public class WfRedocTemplateServiceImpl extends ServiceImpl<WfRedocTemplateMappe
             throw new BusinessException(ResultCode.PARAM_ERROR, "模板文件为空或不存在");
         }
         byte[] processedDocx = wordTemplateEngine.process(templateBytes, placeholders);
+
+        processedDocx = wordTemplateEngine.applyPageSettings(processedDocx,
+                template.getPaperSize(), template.getOrientation(),
+                template.getTopMargin(), template.getBottomMargin(),
+                template.getLeftMargin(), template.getRightMargin());
 
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
         String baseName = (dto.getFileTitle() == null ? "红头文件" : dto.getFileTitle()) + "_" + timestamp;
@@ -152,6 +218,11 @@ public class WfRedocTemplateServiceImpl extends ServiceImpl<WfRedocTemplateMappe
 
         WfAttachment pdfAtt = null;
         byte[] pdfBytes = null;
+        boolean sealApplied = false;
+        boolean signatureApplied = false;
+        Long usedSealId = null;
+        Long usedCertId = null;
+
         if (outputFormat == 2 || outputFormat == 3) {
             pdfBytes = wordToPdfConverter.convertDocxToPdf(processedDocx);
 
@@ -159,13 +230,20 @@ public class WfRedocTemplateServiceImpl extends ServiceImpl<WfRedocTemplateMappe
             Long sealId = dto.getSealId() != null ? dto.getSealId() : template.getSealId();
             if (sealEnabled != null && sealEnabled == 1 && sealId != null) {
                 WfSealConfig seal = sealConfigMapper.selectById(sealId);
-                if (seal != null && seal.getSealImageId() != null) {
+                if (seal != null && seal.getStatus() != null && seal.getStatus() == 1
+                        && seal.getSealImageId() != null) {
                     byte[] sealImg = storageHelper.getBytes(seal.getSealImageId());
                     if (sealImg != null && sealImg.length > 0) {
-                        pdfBytes = sealAndSignatureUtil.applySealImage(pdfBytes, sealImg,
-                                template.getSealPositionType(),
-                                template.getSealOffsetX(), template.getSealOffsetY(),
-                                template.getSealScale());
+                        try {
+                            pdfBytes = sealAndSignatureUtil.applySealImage(pdfBytes, sealImg,
+                                    template.getSealPositionType(),
+                                    template.getSealOffsetX(), template.getSealOffsetY(),
+                                    template.getSealScale());
+                            sealApplied = true;
+                            usedSealId = sealId;
+                        } catch (Exception e) {
+                            log.warn("加盖印章失败，继续生成: {}", e.getMessage());
+                        }
                     }
                 }
             }
@@ -174,6 +252,31 @@ public class WfRedocTemplateServiceImpl extends ServiceImpl<WfRedocTemplateMappe
                     && StrUtil.isNotBlank(template.getWatermarkText())) {
                 pdfBytes = wordToPdfConverter.addWatermark(pdfBytes,
                         template.getWatermarkText(), template.getWatermarkColor());
+            }
+
+            Integer sigEnabled = dto.getSignatureEnabled() != null ? dto.getSignatureEnabled()
+                    : template.getSignatureEnabled();
+            Long certSealId = dto.getSignatureCertId() != null ? dto.getSignatureCertId()
+                    : template.getSignatureCertId();
+            if (sigEnabled != null && sigEnabled == 1 && certSealId != null) {
+                WfSealConfig certSeal = sealConfigMapper.selectById(certSealId);
+                if (certSeal != null && certSeal.getDigitalCertId() != null
+                        && StrUtil.isNotBlank(certSeal.getCertPassword())) {
+                    byte[] certBytes = storageHelper.getBytes(certSeal.getDigitalCertId());
+                    if (certBytes != null && certBytes.length > 0) {
+                        try {
+                            pdfBytes = sealAndSignatureUtil.applyGmSignature(pdfBytes,
+                                    certBytes,
+                                    certSeal.getCertPassword().toCharArray(),
+                                    dto.getFileTitle(),
+                                    certSeal.getSealOwnerName());
+                            signatureApplied = true;
+                            usedCertId = certSealId;
+                        } catch (Exception e) {
+                            log.error("国密数字签名失败，跳过签名不影响文件生成: {}", e.getMessage(), e);
+                        }
+                    }
+                }
             }
 
             pdfAtt = storageHelper.saveFromBytes(pdfBytes, baseName + ".pdf",
@@ -200,12 +303,10 @@ public class WfRedocTemplateServiceImpl extends ServiceImpl<WfRedocTemplateMappe
             g.setPdfFileName(pdfAtt.getFileName());
             g.setPdfFileSize(pdfAtt.getFileSize());
         }
-        Integer sealEnabled = dto.getSealEnabled() != null ? dto.getSealEnabled() : template.getSealEnabled();
-        Long sealId = dto.getSealId() != null ? dto.getSealId() : template.getSealId();
-        g.setSealApplied(sealEnabled != null && sealEnabled == 1 && sealId != null ? 1 : 0);
-        g.setSealId(sealId);
-        g.setSignatureApplied(template.getSignatureEnabled() != null && template.getSignatureEnabled() == 1 ? 1 : 0);
-        g.setSignatureCertId(template.getSignatureCertId());
+        g.setSealApplied(sealApplied ? 1 : 0);
+        g.setSealId(usedSealId);
+        g.setSignatureApplied(signatureApplied ? 1 : 0);
+        g.setSignatureCertId(usedCertId);
         g.setGenerateTime(LocalDateTime.now());
         g.setGenerateBy(SecurityUtils.getCurrentUserIdOrNull());
         g.setGenerateByName(SecurityUtils.getCurrentUserOpt().map(u -> u.getRealName() != null ? u.getRealName() : u.getUsername()).orElse(null));

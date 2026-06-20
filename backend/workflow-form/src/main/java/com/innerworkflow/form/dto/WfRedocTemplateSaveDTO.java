@@ -48,6 +48,18 @@ public class WfRedocTemplateSaveDTO implements Serializable {
     @Schema(description = "纸张方向")
     private Integer orientation;
 
+    @Schema(description = "上边距(厘米)")
+    private Double topMargin;
+
+    @Schema(description = "下边距(厘米)")
+    private Double bottomMargin;
+
+    @Schema(description = "左边距(厘米)")
+    private Double leftMargin;
+
+    @Schema(description = "右边距(厘米)")
+    private Double rightMargin;
+
     @Schema(description = "是否启用印章")
     private Integer sealEnabled;
 
@@ -57,11 +69,23 @@ public class WfRedocTemplateSaveDTO implements Serializable {
     @Schema(description = "印章位置类型")
     private Integer sealPositionType;
 
+    @Schema(description = "印章X偏移(厘米)")
+    private Double sealOffsetX;
+
+    @Schema(description = "印章Y偏移(厘米)")
+    private Double sealOffsetY;
+
     @Schema(description = "印章缩放比例")
     private Double sealScale;
 
     @Schema(description = "是否启用数字签名")
     private Integer signatureEnabled;
+
+    @Schema(description = "默认数字证书印章ID")
+    private Long signatureCertId;
+
+    @Schema(description = "是否审批完成自动生成")
+    private Integer autoGenerate;
 
     @Schema(description = "默认输出格式")
     private Integer outputFormat;
@@ -71,6 +95,9 @@ public class WfRedocTemplateSaveDTO implements Serializable {
 
     @Schema(description = "水印文字")
     private String watermarkText;
+
+    @Schema(description = "水印颜色")
+    private String watermarkColor;
 
     @Schema(description = "占位符示例JSON")
     private String placeholderSample;

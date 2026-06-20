@@ -392,6 +392,11 @@ export const redocApi = {
     request<void>({ url: `/approval/redoc/template/${id}`, method: 'delete' }),
   templatePlaceholders: (id: number) =>
     request<string[]>({ url: `/approval/redoc/template/${id}/placeholders`, method: 'get' }),
+  templateUpload: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return request<AttachmentVO>({ url: '/approval/redoc/template/upload', method: 'post', data: form })
+  },
 
   generate: (data: WfRedocGenerateDTO) =>
     request<WfRedocGeneratedVO>({ url: '/approval/redoc/generate', method: 'post', data }),
@@ -435,7 +440,17 @@ export const sealApi = {
   save: (data: WfSealConfigSaveDTO) =>
     request<WfSealConfigVO>({ url: '/approval/seal', method: 'post', data }),
   remove: (id: number) =>
-    request<void>({ url: `/approval/seal/${id}`, method: 'delete' })
+    request<void>({ url: `/approval/seal/${id}`, method: 'delete' }),
+  imageUpload: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return request<AttachmentVO>({ url: '/approval/seal/image/upload', method: 'post', data: form })
+  },
+  certUpload: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return request<AttachmentVO>({ url: '/approval/seal/cert/upload', method: 'post', data: form })
+  }
 }
 
 const api = {

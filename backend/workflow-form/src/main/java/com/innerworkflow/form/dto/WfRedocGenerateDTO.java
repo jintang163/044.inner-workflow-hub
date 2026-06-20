@@ -49,6 +49,9 @@ public class WfRedocGenerateDTO implements Serializable {
     @Schema(description = "是否启用国密签名(覆盖模板配置)")
     private Integer signatureEnabled;
 
+    @Schema(description = "国密证书印章ID(覆盖模板默认证书)")
+    private Long signatureCertId;
+
     @Schema(description = "自定义占位符值Map(key=占位符名不含{},value=替换值)")
     private Map<String, Object> placeholderValues;
 }

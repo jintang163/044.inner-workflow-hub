@@ -41,6 +41,8 @@ public class WfSealConfig extends BaseEntity {
 
     private String digitalCertAlias;
 
+    private String certPassword;
+
     private String signatureAlgorithm;
 
     private Integer keepCertificate;

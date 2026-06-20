@@ -61,6 +61,8 @@ public class WfRedocTemplate extends BaseEntity {
 
     private Long signatureCertId;
 
+    private Integer autoGenerate;
+
     private Integer outputFormat;
 
     private Integer watermarkEnabled;

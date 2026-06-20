@@ -10,14 +10,23 @@ export interface WfRedocTemplateVO {
   headerFontSize?: number
   paperSize?: string
   orientation?: number
+  topMargin?: number
+  bottomMargin?: number
+  leftMargin?: number
+  rightMargin?: number
   sealEnabled?: number
   sealId?: number
   sealPositionType?: number
+  sealOffsetX?: number
+  sealOffsetY?: number
   sealScale?: number
   signatureEnabled?: number
+  signatureCertId?: number
+  autoGenerate?: number
   outputFormat?: number
   watermarkEnabled?: number
   watermarkText?: string
+  watermarkColor?: string
   placeholderSample?: string
   status: number
   remark?: string
@@ -36,14 +45,23 @@ export interface WfRedocTemplateSaveDTO {
   headerFontSize?: number
   paperSize?: string
   orientation?: number
+  topMargin?: number
+  bottomMargin?: number
+  leftMargin?: number
+  rightMargin?: number
   sealEnabled?: number
   sealId?: number
   sealPositionType?: number
+  sealOffsetX?: number
+  sealOffsetY?: number
   sealScale?: number
   signatureEnabled?: number
+  signatureCertId?: number
+  autoGenerate?: number
   outputFormat?: number
   watermarkEnabled?: number
   watermarkText?: string
+  watermarkColor?: string
   placeholderSample?: string
   status?: number
   remark?: string
@@ -60,6 +78,7 @@ export interface WfRedocGenerateDTO {
   sealId?: number
   sealEnabled?: number
   signatureEnabled?: number
+  signatureCertId?: number
   placeholderValues?: Record<string, any>
 }
 
@@ -105,6 +124,7 @@ export interface WfSealConfigVO {
   sealCode: string
   sealName: string
   sealType?: number
+  sealOwnerId?: number
   sealOwnerName?: string
   sealImageId?: number
   sealImageUrl?: string
@@ -112,7 +132,15 @@ export interface WfSealConfigVO {
   sealShape?: number
   sealDiameter?: number
   sealColor?: string
+  digitalCertId?: number
+  digitalCertAlias?: string
+  certPassword?: string
   signatureAlgorithm?: string
+  keepCertificate?: number
+  timestampEnabled?: number
+  timestampUrl?: string
+  allowedUserIds?: string
+  allowedDeptIds?: string
   status: number
   remark?: string
   createTime?: string
@@ -131,7 +159,12 @@ export interface WfSealConfigSaveDTO {
   sealDiameter?: number
   sealColor?: string
   digitalCertId?: number
+  digitalCertAlias?: string
+  certPassword?: string
   signatureAlgorithm?: string
+  keepCertificate?: number
+  timestampEnabled?: number
+  timestampUrl?: string
   allowedUserIds?: string
   allowedDeptIds?: string
   status?: number

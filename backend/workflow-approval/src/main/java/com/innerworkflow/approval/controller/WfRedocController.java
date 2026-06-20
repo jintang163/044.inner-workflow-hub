@@ -1,7 +1,9 @@
 package com.innerworkflow.approval.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.innerworkflow.approval.service.WfAttachmentService;
 import com.innerworkflow.approval.service.WfRedocTemplateService;
+import com.innerworkflow.approval.vo.WfAttachmentVO;
 import com.innerworkflow.common.result.R;
 import com.innerworkflow.form.dto.WfRedocBatchDTO;
 import com.innerworkflow.form.dto.WfRedocGenerateDTO;
@@ -16,6 +18,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -29,6 +32,13 @@ import java.util.Set;
 public class WfRedocController {
 
     private final WfRedocTemplateService redocTemplateService;
+    private final WfAttachmentService attachmentService;
+
+    @Operation(summary = "上传红头模板Word文件")
+    @PostMapping("/template/upload")
+    public R<WfAttachmentVO> uploadTemplate(@RequestParam("file") MultipartFile file) {
+        return R.success(attachmentService.upload(file, "redoc_template", null, null));
+    }
 
     @Operation(summary = "模板列表")
     @GetMapping("/template/list")

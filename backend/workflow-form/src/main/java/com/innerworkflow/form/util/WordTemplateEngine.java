@@ -1,13 +1,19 @@
 package com.innerworkflow.form.util;
 
+import cn.hutool.core.util.StrUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.xwpf.usermodel.*;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTPageMar;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTPageSz;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTSectPr;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.STPageOrientation;
 import org.springframework.stereotype.Component;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.math.BigInteger;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -196,5 +202,73 @@ public class WordTemplateEngine {
         for (int i = lastRunIdx; i > firstRunIdx; i--) {
             paragraph.removeRun(i);
         }
+    }
+
+    /**
+     * 应用纸张和边距设置
+     * @param docxBytes 原始Word字节
+     * @param paperSize 纸张规格 A4/A3
+     * @param orientation 方向 1-纵向 2-横向
+     * @param topMarginCm 上边距(厘米)
+     * @param bottomMarginCm 下边距(厘米)
+     * @param leftMarginCm 左边距(厘米)
+     * @param rightMarginCm 右边距(厘米)
+     * @return 处理后的Word字节
+     */
+    public byte[] applyPageSettings(byte[] docxBytes, String paperSize, Integer orientation,
+                                    Double topMarginCm, Double bottomMarginCm,
+                                    Double leftMarginCm, Double rightMarginCm) {
+        try (XWPFDocument doc = new XWPFDocument(new ByteArrayInputStream(docxBytes));
+             ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            CTSectPr sectPr = doc.getDocument().getBody().getSectPr();
+            if (sectPr == null) {
+                sectPr = doc.getDocument().getBody().addNewSectPr();
+            }
+
+            if (StrUtil.isNotBlank(paperSize) || (orientation != null)) {
+                CTPageSz pageSz = sectPr.isSetPgSz() ? sectPr.getPgSz() : sectPr.addNewPgSz();
+                String ps = paperSize == null ? "A4" : paperSize.toUpperCase();
+                long w, h;
+                switch (ps) {
+                    case "A3":
+                        w = 16838; h = 23811; break;
+                    case "A4":
+                    default:
+                        w = 11906; h = 16838; break;
+                }
+                int orient = orientation == null ? 1 : orientation;
+                if (orient == 2) {
+                    pageSz.setW(BigInteger.valueOf(h));
+                    pageSz.setH(BigInteger.valueOf(w));
+                    pageSz.setOrient(STPageOrientation.LANDSCAPE);
+                } else {
+                    pageSz.setW(BigInteger.valueOf(w));
+                    pageSz.setH(BigInteger.valueOf(h));
+                    pageSz.setOrient(STPageOrientation.PORTRAIT);
+                }
+            }
+
+            if (topMarginCm != null || bottomMarginCm != null || leftMarginCm != null || rightMarginCm != null) {
+                CTPageMar pageMar = sectPr.isSetPgMar() ? sectPr.getPgMar() : sectPr.addNewPgMar();
+                long top = topMarginCm != null ? cmToTwips(topMarginCm) : (pageMar.isSetTop() ? pageMar.getTop().longValue() : 1440);
+                long bottom = bottomMarginCm != null ? cmToTwips(bottomMarginCm) : (pageMar.isSetBottom() ? pageMar.getBottom().longValue() : 1440);
+                long left = leftMarginCm != null ? cmToTwips(leftMarginCm) : (pageMar.isSetLeft() ? pageMar.getLeft().longValue() : 1800);
+                long right = rightMarginCm != null ? cmToTwips(rightMarginCm) : (pageMar.isSetRight() ? pageMar.getRight().longValue() : 1800);
+                pageMar.setTop(BigInteger.valueOf(top));
+                pageMar.setBottom(BigInteger.valueOf(bottom));
+                pageMar.setLeft(BigInteger.valueOf(left));
+                pageMar.setRight(BigInteger.valueOf(right));
+            }
+
+            doc.write(out);
+            return out.toByteArray();
+        } catch (Exception e) {
+            log.warn("应用Word页面设置失败，使用原始模板: {}", e.getMessage());
+            return docxBytes;
+        }
+    }
+
+    private long cmToTwips(double cm) {
+        return (long) (cm * 567);
     }
 }

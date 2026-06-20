@@ -1,7 +1,9 @@
 package com.innerworkflow.approval.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.innerworkflow.approval.service.WfAttachmentService;
 import com.innerworkflow.approval.service.WfSealConfigService;
+import com.innerworkflow.approval.vo.WfAttachmentVO;
 import com.innerworkflow.common.result.R;
 import com.innerworkflow.form.dto.WfSealConfigSaveDTO;
 import com.innerworkflow.form.vo.WfSealConfigVO;
@@ -10,6 +12,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -20,6 +23,19 @@ import java.util.List;
 public class WfSealController {
 
     private final WfSealConfigService sealConfigService;
+    private final WfAttachmentService attachmentService;
+
+    @Operation(summary = "上传印章图片")
+    @PostMapping("/image/upload")
+    public R<WfAttachmentVO> uploadSealImage(@RequestParam("file") MultipartFile file) {
+        return R.success(attachmentService.upload(file, "seal_image", null, null));
+    }
+
+    @Operation(summary = "上传国密数字证书(p12)")
+    @PostMapping("/cert/upload")
+    public R<WfAttachmentVO> uploadCert(@RequestParam("file") MultipartFile file) {
+        return R.success(attachmentService.upload(file, "seal_cert", null, null));
+    }
 
     @Operation(summary = "印章列表")
     @GetMapping("/list")

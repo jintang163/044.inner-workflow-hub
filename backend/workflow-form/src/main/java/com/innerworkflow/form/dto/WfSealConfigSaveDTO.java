@@ -52,8 +52,23 @@ public class WfSealConfigSaveDTO implements Serializable {
     @Schema(description = "关联数字证书ID")
     private Long digitalCertId;
 
+    @Schema(description = "数字证书别名")
+    private String digitalCertAlias;
+
+    @Schema(description = "证书密码")
+    private String certPassword;
+
     @Schema(description = "签名算法")
     private String signatureAlgorithm;
+
+    @Schema(description = "是否嵌入证书")
+    private Integer keepCertificate;
+
+    @Schema(description = "是否加时间戳")
+    private Integer timestampEnabled;
+
+    @Schema(description = "时间戳服务URL")
+    private String timestampUrl;
 
     @Schema(description = "允许使用的用户ID列表")
     private String allowedUserIds;
