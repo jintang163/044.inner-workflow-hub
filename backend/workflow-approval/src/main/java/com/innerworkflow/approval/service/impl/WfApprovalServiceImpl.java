@@ -853,6 +853,10 @@ public class WfApprovalServiceImpl implements WfApprovalService {
             detailVO.setParentProcessInstance(parentVO);
         }
 
+        if (instance.getInstanceNo() != null) {
+            detailVO.setAttachments(attachmentService.listByBiz("FORM", instance.getInstanceNo()));
+        }
+
         calcButtonPermissions(detailVO, instance);
 
         return detailVO;

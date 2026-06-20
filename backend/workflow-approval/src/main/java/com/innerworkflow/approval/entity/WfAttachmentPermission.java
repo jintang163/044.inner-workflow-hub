@@ -10,8 +10,8 @@ import java.io.Serializable;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("wf_attachment")
-public class WfAttachment implements Serializable {
+@TableName("wf_attachment_permission")
+public class WfAttachmentPermission implements Serializable {
 
     @Serial
     private static final long serialVersionUID = 1L;
@@ -19,37 +19,21 @@ public class WfAttachment implements Serializable {
     @TableId(value = "id", type = IdType.AUTO)
     private Long id;
 
-    private String fileName;
-
-    private String fileSuffix;
-
-    private Long fileSize;
-
-    private String fileType;
-
-    private Integer storageType;
-
-    private String bucketName;
-
-    private String objectName;
-
-    private String storagePath;
-
-    private String accessUrl;
-
-    private String previewUrl;
-
-    private String downloadUrl;
-
-    private String md5;
-
-    private Long uploadUserId;
-
-    private String bizType;
-
-    private String bizId;
+    private Long processVersionId;
 
     private String nodeId;
+
+    private String nodeName;
+
+    private Integer attachmentVisible;
+
+    private Integer attachmentEditable;
+
+    private Long maxFileSize;
+
+    private String allowedTypes;
+
+    private Integer maxFileCount;
 
     @TableField(value = "tenant_id", fill = FieldFill.INSERT)
     private Long tenantId;

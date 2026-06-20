@@ -14,8 +14,8 @@ spring:
     active: dev
   servlet:
     multipart:
-      max-file-size: 50MB
-      max-request-size: 100MB
+      max-file-size: 100MB
+      max-request-size: 200MB
 
   datasource:
     type: com.alibaba.druid.pool.DruidDataSource
@@ -180,6 +180,18 @@ workflow:
   file:
     upload-path: ./uploads/
     url-prefix: /static/
+
+  attachment:
+    max-file-size: 104857600
+    allowed-types: jpg,jpeg,png,gif,bmp,webp,pdf,doc,docx,xls,xlsx,ppt,pptx
+    max-file-count: 20
+
+  minio:
+    endpoint: http://127.0.0.1:9000
+    access-key: minioadmin
+    secret-key: minioadmin
+    bucket-name: workflow-attachments
+    presign-expiry: 3600
 
 logging:
   level:

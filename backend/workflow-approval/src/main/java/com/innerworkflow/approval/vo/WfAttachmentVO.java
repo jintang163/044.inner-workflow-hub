@@ -25,9 +25,17 @@ public class WfAttachmentVO implements Serializable {
 
     private Integer storageType;
 
+    private String bucketName;
+
+    private String objectName;
+
     private String storagePath;
 
     private String accessUrl;
+
+    private String previewUrl;
+
+    private String downloadUrl;
 
     private String md5;
 
@@ -38,6 +46,10 @@ public class WfAttachmentVO implements Serializable {
     private String bizType;
 
     private String bizId;
+
+    private String nodeId;
+
+    private Boolean previewable;
 
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime createTime;
