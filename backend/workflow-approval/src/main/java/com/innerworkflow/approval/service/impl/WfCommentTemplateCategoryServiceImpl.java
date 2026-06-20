@@ -91,7 +91,8 @@ public class WfCommentTemplateCategoryServiceImpl extends ServiceImpl<WfCommentT
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean save(WfCommentTemplateCategorySaveDTO saveDTO) {
-        checkPermission(saveDTO.getScopeType(), saveDTO.getDeptId());
+        fillDeptIdForDeptPublic(saveDTO);
+        checkPermission(saveDTO.getScopeType(), saveDTO.getDeptId(), null);
         checkCategoryCodeUnique(null, saveDTO.getCategoryCode());
 
         WfCommentTemplateCategory entity = new WfCommentTemplateCategory();
@@ -117,13 +118,14 @@ public class WfCommentTemplateCategoryServiceImpl extends ServiceImpl<WfCommentT
             throw BusinessException.notFound("分类不存在");
         }
 
-        checkPermission(entity.getScopeType(), entity.getDeptId());
+        checkPermission(entity.getScopeType(), entity.getDeptId(), entity.getCreateBy());
         if (saveDTO.getCategoryCode() != null && !saveDTO.getCategoryCode().equals(entity.getCategoryCode())) {
             checkCategoryCodeUnique(entity.getId(), saveDTO.getCategoryCode());
         }
 
         if (saveDTO.getScopeType() != null && !saveDTO.getScopeType().equals(entity.getScopeType())) {
-            checkPermission(saveDTO.getScopeType(), saveDTO.getDeptId());
+            fillDeptIdForDeptPublic(saveDTO);
+            checkPermission(saveDTO.getScopeType(), saveDTO.getDeptId(), null);
         }
 
         BeanUtils.copyProperties(saveDTO, entity);
@@ -142,7 +144,7 @@ public class WfCommentTemplateCategoryServiceImpl extends ServiceImpl<WfCommentT
             throw BusinessException.notFound("分类不存在");
         }
 
-        checkPermission(entity.getScopeType(), entity.getDeptId());
+        checkPermission(entity.getScopeType(), entity.getDeptId(), entity.getCreateBy());
 
         boolean result = this.removeById(id);
         if (result) {
@@ -159,7 +161,7 @@ public class WfCommentTemplateCategoryServiceImpl extends ServiceImpl<WfCommentT
             throw BusinessException.notFound("分类不存在");
         }
 
-        checkPermission(entity.getScopeType(), entity.getDeptId());
+        checkPermission(entity.getScopeType(), entity.getDeptId(), entity.getCreateBy());
 
         entity.setStatus(status);
         boolean result = this.updateById(entity);
@@ -167,6 +169,14 @@ public class WfCommentTemplateCategoryServiceImpl extends ServiceImpl<WfCommentT
             log.info("更新意见模板分类状态成功, id={}, status={}", id, status);
         }
         return result;
+    }
+
+    private void fillDeptIdForDeptPublic(WfCommentTemplateCategorySaveDTO saveDTO) {
+        if (CommentTemplateScopeEnum.DEPT_PUBLIC.getCode().equals(saveDTO.getScopeType())
+                && saveDTO.getDeptId() == null) {
+            Long currentDeptId = SecurityUtils.getCurrentDeptId();
+            saveDTO.setDeptId(currentDeptId);
+        }
     }
 
     @Override
@@ -205,7 +215,7 @@ public class WfCommentTemplateCategoryServiceImpl extends ServiceImpl<WfCommentT
         }
     }
 
-    private void checkPermission(Integer scopeType, Long deptId) {
+    private void checkPermission(Integer scopeType, Long deptId, Long createBy) {
         if (SecurityUtils.isSuperAdmin()) {
             return;
         }
@@ -214,6 +224,8 @@ public class WfCommentTemplateCategoryServiceImpl extends ServiceImpl<WfCommentT
         if (scopeEnum == null) {
             throw BusinessException.paramError("适用范围类型错误");
         }
+
+        Long currentUserId = SecurityUtils.getCurrentUserId();
 
         switch (scopeEnum) {
             case GLOBAL:
@@ -225,6 +237,10 @@ public class WfCommentTemplateCategoryServiceImpl extends ServiceImpl<WfCommentT
                 }
                 break;
             case PERSONAL:
+                if (createBy != null && !createBy.equals(currentUserId)) {
+                    throw BusinessException.forbidden("只能管理自己创建的个人模板分类");
+                }
+                break;
             default:
                 break;
         }

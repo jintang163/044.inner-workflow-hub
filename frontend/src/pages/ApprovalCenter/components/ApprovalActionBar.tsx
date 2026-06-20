@@ -121,7 +121,6 @@ const BaseApprovalModal: React.FC<ApprovalModalProps> = ({
             placeholder={type === 'approve' ? '请输入同意理由（可选）' : '请输入拒绝理由'}
             maxLength={500}
             showCount
-            onManageClick={() => message.info('请到\"意见模板管理\"页面进行模板管理')}
           />
         </Form.Item>
         {needSignature && (

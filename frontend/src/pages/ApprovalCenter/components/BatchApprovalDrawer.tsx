@@ -191,7 +191,6 @@ const BatchApprovalDrawer: React.FC<BatchApprovalDrawerProps> = ({
                 }
                 showCount
                 maxLength={500}
-                onManageClick={() => message.info('请到\"意见模板管理\"页面进行模板管理')}
               />
             </Form.Item>
 

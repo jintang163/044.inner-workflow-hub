@@ -116,6 +116,7 @@ public class WfCommentTemplateServiceImpl extends ServiceImpl<WfCommentTemplateM
     @Transactional(rollbackFor = Exception.class)
     public boolean save(WfCommentTemplateSaveDTO saveDTO) {
         checkCategoryPermission(saveDTO.getCategoryId());
+        fillDeptIdForDeptPublic(saveDTO);
         checkPermission(saveDTO.getScopeType(), saveDTO.getDeptId());
 
         WfCommentTemplate entity = new WfCommentTemplate();
@@ -144,13 +145,14 @@ public class WfCommentTemplateServiceImpl extends ServiceImpl<WfCommentTemplateM
             throw BusinessException.notFound("模板不存在");
         }
 
-        checkPermission(entity.getScopeType(), entity.getDeptId());
+        checkPermission(entity.getScopeType(), entity.getDeptId(), entity.getCreateBy());
 
         if (saveDTO.getCategoryId() != null && !saveDTO.getCategoryId().equals(entity.getCategoryId())) {
             checkCategoryPermission(saveDTO.getCategoryId());
         }
 
         if (saveDTO.getScopeType() != null && !saveDTO.getScopeType().equals(entity.getScopeType())) {
+            fillDeptIdForDeptPublic(saveDTO);
             checkPermission(saveDTO.getScopeType(), saveDTO.getDeptId());
         }
 
@@ -170,7 +172,7 @@ public class WfCommentTemplateServiceImpl extends ServiceImpl<WfCommentTemplateM
             throw BusinessException.notFound("模板不存在");
         }
 
-        checkPermission(entity.getScopeType(), entity.getDeptId());
+        checkPermission(entity.getScopeType(), entity.getDeptId(), entity.getCreateBy());
 
         boolean result = this.removeById(id);
         if (result) {
@@ -187,7 +189,7 @@ public class WfCommentTemplateServiceImpl extends ServiceImpl<WfCommentTemplateM
             throw BusinessException.notFound("模板不存在");
         }
 
-        checkPermission(entity.getScopeType(), entity.getDeptId());
+        checkPermission(entity.getScopeType(), entity.getDeptId(), entity.getCreateBy());
 
         entity.setStatus(status);
         boolean result = this.updateById(entity);
@@ -195,6 +197,14 @@ public class WfCommentTemplateServiceImpl extends ServiceImpl<WfCommentTemplateM
             log.info("更新意见模板状态成功, id={}, status={}", id, status);
         }
         return result;
+    }
+
+    private void fillDeptIdForDeptPublic(WfCommentTemplateSaveDTO saveDTO) {
+        if (CommentTemplateScopeEnum.DEPT_PUBLIC.getCode().equals(saveDTO.getScopeType())
+                && saveDTO.getDeptId() == null) {
+            Long currentDeptId = SecurityUtils.getCurrentDeptId();
+            saveDTO.setDeptId(currentDeptId);
+        }
     }
 
     @Override
@@ -240,10 +250,10 @@ public class WfCommentTemplateServiceImpl extends ServiceImpl<WfCommentTemplateM
         if (category == null) {
             throw BusinessException.notFound("分类不存在");
         }
-        checkPermission(category.getScopeType(), category.getDeptId());
+        checkPermission(category.getScopeType(), category.getDeptId(), null);
     }
 
-    private void checkPermission(Integer scopeType, Long deptId) {
+    private void checkPermission(Integer scopeType, Long deptId, Long createBy) {
         if (SecurityUtils.isSuperAdmin()) {
             return;
         }
@@ -265,6 +275,10 @@ public class WfCommentTemplateServiceImpl extends ServiceImpl<WfCommentTemplateM
                 }
                 break;
             case PERSONAL:
+                if (createBy != null && !createBy.equals(currentUserId)) {
+                    throw BusinessException.forbidden("只能管理自己创建的个人模板");
+                }
+                break;
             default:
                 break;
         }

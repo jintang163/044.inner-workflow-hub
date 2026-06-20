@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Button, Popover, Tag, Input, Empty, Spin } from 'antd'
 import {
   FormOutlined,
@@ -6,7 +7,7 @@ import {
   UserOutlined,
   TeamOutlined,
   GlobalOutlined,
-  PlusOutlined
+  SettingOutlined
 } from '@ant-design/icons'
 import { approvalApi } from '@/api'
 import type { CommentTemplateVO, CommentTemplateCategoryVO } from '@/types/approval'
@@ -23,7 +24,6 @@ interface CommentTemplateSelectProps {
   rows?: number
   showCount?: boolean
   allowManage?: boolean
-  onManageClick?: () => void
 }
 
 const CommentTemplateSelect: React.FC<CommentTemplateSelectProps> = ({
@@ -35,9 +35,9 @@ const CommentTemplateSelect: React.FC<CommentTemplateSelectProps> = ({
   maxLength = 500,
   rows = 4,
   showCount = true,
-  allowManage = true,
-  onManageClick
+  allowManage = true
 }) => {
+  const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
   const [categories, setCategories] = useState<CommentTemplateCategoryVO[]>([])
   const [templates, setTemplates] = useState<CommentTemplateVO[]>([])
@@ -222,10 +222,10 @@ const CommentTemplateSelect: React.FC<CommentTemplateSelectProps> = ({
           <Button
             type="link"
             size="small"
-            icon={<PlusOutlined />}
+            icon={<SettingOutlined />}
             onClick={() => {
               setPopoverOpen(false)
-              onManageClick?.()
+              navigate('/approval/comment-template')
             }}
           >
             管理模板
