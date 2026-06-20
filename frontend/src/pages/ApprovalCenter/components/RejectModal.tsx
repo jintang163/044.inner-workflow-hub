@@ -1,8 +1,9 @@
 import React, { useState, useRef, useMemo } from 'react'
-import { Modal, Form, Input, Select, Alert, Upload, Button, Radio, Space, Typography, Tag, Tooltip } from 'antd'
+import { Modal, Form, Input, Select, Alert, Upload, Button, Radio, Space, Typography, Tag, Tooltip, message } from 'antd'
 import { ExclamationCircleOutlined, WarningOutlined, InfoCircleOutlined } from '@ant-design/icons'
 import type { UploadFile, UploadProps } from 'antd/es/upload/interface'
 import SignaturePad, { SignaturePadRef } from './SignaturePad'
+import CommentTemplateSelect from '@/components/business/CommentTemplateSelect'
 import type { ApprovalTaskVO, ApprovalHistoryVO } from '@/types/approval'
 
 const { TextArea } = Input
@@ -237,12 +238,13 @@ const RejectModal: React.FC<RejectModalProps> = ({
             ]}
             style={{ marginBottom: task.needSignature ? 8 : 0 }}
           >
-            <TextArea
+            <CommentTemplateSelect
               rows={4}
               placeholder="请详细说明驳回原因（不少于5个字），便于申请人了解问题并进行修改"
-              showCount
               maxLength={500}
+              showCount
               disabled={reachMaxReject}
+              onManageClick={() => message.info('请到\"意见模板管理\"页面进行模板管理')}
             />
           </Form.Item>
 

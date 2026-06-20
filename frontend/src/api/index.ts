@@ -36,7 +36,12 @@ import {
   DelegationQueryDTO,
   BatchTransferDTO,
   TransferRecordVO,
-  AttachmentVO
+  AttachmentVO,
+  CommentTemplateVO,
+  CommentTemplateCategoryVO,
+  CommentTemplateSaveDTO,
+  CommentTemplateCategorySaveDTO,
+  CommentTemplateQueryDTO
 } from '@/types/approval'
 import {
   TenantVO,
@@ -295,6 +300,40 @@ export const approvalApi = {
     request<void>({ url: `/api/approval/agent-config/${id}`, method: 'delete' }),
   agentConfigMyList: () =>
     request<any[]>({ url: '/api/approval/agent-config/my/list', method: 'get' }),
+
+  commentTemplateCategoryPage: (params?: any) =>
+    request<PageResult<CommentTemplateCategoryVO>>({ url: '/api/approval/comment-template-category/page', method: 'get', params }),
+  commentTemplateCategoryAvailable: () =>
+    request<CommentTemplateCategoryVO[]>({ url: '/api/approval/comment-template-category/available', method: 'get' }),
+  commentTemplateCategoryGet: (id: number) =>
+    request<CommentTemplateCategoryVO>({ url: `/api/approval/comment-template-category/${id}`, method: 'get' }),
+  commentTemplateCategorySave: (data: CommentTemplateCategorySaveDTO) =>
+    request<void>({ url: '/api/approval/comment-template-category', method: 'post', data }),
+  commentTemplateCategoryUpdate: (data: CommentTemplateCategorySaveDTO) =>
+    request<void>({ url: '/api/approval/comment-template-category', method: 'put', data }),
+  commentTemplateCategoryDelete: (id: number) =>
+    request<void>({ url: `/api/approval/comment-template-category/${id}`, method: 'delete' }),
+  commentTemplateCategoryUpdateStatus: (id: number, status: number) =>
+    request<void>({ url: `/api/approval/comment-template-category/status/${id}`, method: 'put', params: { status } }),
+
+  commentTemplatePage: (params?: CommentTemplateQueryDTO) =>
+    request<PageResult<CommentTemplateVO>>({ url: '/api/approval/comment-template/page', method: 'get', params }),
+  commentTemplateMyAvailable: () =>
+    request<CommentTemplateVO[]>({ url: '/api/approval/comment-template/my-available', method: 'get' }),
+  commentTemplateByCategory: (categoryId: number) =>
+    request<CommentTemplateVO[]>({ url: `/api/approval/comment-template/category/${categoryId}`, method: 'get' }),
+  commentTemplateGet: (id: number) =>
+    request<CommentTemplateVO>({ url: `/api/approval/comment-template/${id}`, method: 'get' }),
+  commentTemplateSave: (data: CommentTemplateSaveDTO) =>
+    request<void>({ url: '/api/approval/comment-template', method: 'post', data }),
+  commentTemplateUpdate: (data: CommentTemplateSaveDTO) =>
+    request<void>({ url: '/api/approval/comment-template', method: 'put', data }),
+  commentTemplateDelete: (id: number) =>
+    request<void>({ url: `/api/approval/comment-template/${id}`, method: 'delete' }),
+  commentTemplateUpdateStatus: (id: number, status: number) =>
+    request<void>({ url: `/api/approval/comment-template/status/${id}`, method: 'put', params: { status } }),
+  commentTemplateUse: (id: number) =>
+    request<void>({ url: `/api/approval/comment-template/use/${id}`, method: 'post' }),
 }
 
 export const notifyApi = {

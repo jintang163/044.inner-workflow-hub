@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react'
-import { Button, Space, Modal, Form, Input, Upload, Alert, Tag, Tooltip } from 'antd'
+import { Button, Space, Modal, Form, Input, Upload, Alert, Tag, Tooltip, message } from 'antd'
 import {
   CheckOutlined,
   CloseOutlined,
@@ -7,7 +7,8 @@ import {
   TeamOutlined,
   UserOutlined,
   RollbackOutlined,
-  ExclamationCircleOutlined
+  ExclamationCircleOutlined,
+  SettingOutlined
 } from '@ant-design/icons'
 import type { ApprovalHistoryVO } from '@/types/approval'
 import type { UploadFile, UploadProps } from 'antd/es/upload/interface'
@@ -16,6 +17,7 @@ import TransferModal from './TransferModal'
 import AddSignModal from './AddSignModal'
 import DelegateModal from './DelegateModal'
 import RejectModal from './RejectModal'
+import CommentTemplateSelect from '@/components/business/CommentTemplateSelect'
 import type { ApprovalTaskVO } from '@/types/approval'
 
 const { TextArea } = Input
@@ -114,11 +116,12 @@ const BaseApprovalModal: React.FC<ApprovalModalProps> = ({
           rules={needComment ? [{ required: true, message: '请输入审批意见' }] : []}
           style={{ marginBottom: needSignature ? 8 : 0 }}
         >
-          <TextArea
+          <CommentTemplateSelect
             rows={4}
             placeholder={type === 'approve' ? '请输入同意理由（可选）' : '请输入拒绝理由'}
-            showCount
             maxLength={500}
+            showCount
+            onManageClick={() => message.info('请到\"意见模板管理\"页面进行模板管理')}
           />
         </Form.Item>
         {needSignature && (

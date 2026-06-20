@@ -408,3 +408,76 @@ export interface WebSocketMessage<T = any> {
   type: string
   data?: T
 }
+
+export type CommentTemplateScopeType = 0 | 1 | 2
+
+export interface CommentTemplateCategoryVO {
+  id: number
+  categoryName: string
+  categoryCode: string
+  scopeType: CommentTemplateScopeType
+  scopeTypeName: string
+  deptId?: number
+  deptName?: string
+  sortOrder: number
+  status: number
+  remark?: string
+  createBy?: number
+  createByName?: string
+  createTime: string
+  updateTime: string
+}
+
+export interface CommentTemplateVO {
+  id: number
+  categoryId: number
+  categoryName: string
+  templateName: string
+  templateContent: string
+  scopeType: CommentTemplateScopeType
+  scopeTypeName: string
+  deptId?: number
+  deptName?: string
+  sortOrder: number
+  useCount: number
+  status: number
+  remark?: string
+  createBy?: number
+  createByName?: string
+  createTime: string
+  updateTime: string
+}
+
+export interface CommentTemplateCategorySaveDTO {
+  id?: number
+  categoryName: string
+  categoryCode: string
+  scopeType: CommentTemplateScopeType
+  deptId?: number
+  sortOrder?: number
+  status?: number
+  remark?: string
+}
+
+export interface CommentTemplateSaveDTO {
+  id?: number
+  categoryId: number
+  templateName: string
+  templateContent: string
+  scopeType: CommentTemplateScopeType
+  deptId?: number
+  sortOrder?: number
+  status?: number
+  remark?: string
+}
+
+export interface CommentTemplateQueryDTO {
+  pageNum?: number
+  pageSize?: number
+  categoryId?: number
+  templateName?: string
+  keyword?: string
+  scopeType?: CommentTemplateScopeType
+  status?: number
+  sortBy?: string
+}

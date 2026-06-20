@@ -22,6 +22,7 @@ import {
   ExclamationCircleOutlined
 } from '@ant-design/icons'
 import SignaturePad, { SignaturePadRef } from './SignaturePad'
+import CommentTemplateSelect from '@/components/business/CommentTemplateSelect'
 import type { ApprovalTaskVO } from '@/types/approval'
 
 const { Text, Paragraph } = Typography
@@ -181,7 +182,7 @@ const BatchApprovalDrawer: React.FC<BatchApprovalDrawerProps> = ({
               }
               style={{ marginBottom: needSignature ? 8 : 16 }}
             >
-              <TextArea
+              <CommentTemplateSelect
                 rows={4}
                 placeholder={
                   activeAction === 'reject'
@@ -190,6 +191,7 @@ const BatchApprovalDrawer: React.FC<BatchApprovalDrawerProps> = ({
                 }
                 showCount
                 maxLength={500}
+                onManageClick={() => message.info('请到\"意见模板管理\"页面进行模板管理')}
               />
             </Form.Item>
 
