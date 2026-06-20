@@ -139,6 +139,82 @@ INSERT INTO sys_dict_data (dict_code, dict_label, dict_value, dict_sort, parent_
 ('region', '广州市', 'guangzhou', 1, 'guangdong', 1),
 ('region', '深圳市', 'shenzhen', 2, 'guangdong', 1);
 
+-- 2.6 插入初始字典类型 - 扩展(API来源)
+INSERT INTO sys_dict_type (dict_name, dict_code, source_type, cache_enabled, cache_ttl, status, remark) VALUES
+('员工列表', 'employee', 1, 1, 1800, 1, '员工列表-来自userApi动态获取'),
+('部门列表', 'dept', 1, 1, 3600, 1, '部门列表-来自deptApi动态获取'),
+('成本中心', 'cost_center', 1, 1, 1800, 1, '成本中心列表-来自HR系统API'),
+('供应商列表', 'supplier', 1, 1, 1800, 1, '供应商列表-来自ERP系统API'),
+('客户列表', 'customer', 1, 1, 1800, 1, '客户列表-来自CRM系统API'),
+('预算科目', 'budget_subject', 1, 1, 3600, 1, '预算科目-来自预算系统API');
+
+-- ============================================================
+-- 3. 插入预置API数据源配置(员工/成本中心等)
+-- ============================================================
+
+-- 3.1 员工列表数据源配置 - 调用内部用户API /api/user/list
+INSERT INTO wf_data_source_config
+(source_code, source_name, source_type, api_url, api_method, api_params_template,
+ response_path, label_field, value_field,
+ cache_enabled, cache_ttl, timeout, auth_type, status, remark)
+VALUES
+('employee', '员工列表(HR接口)', 1, '/api/user/list', 'GET', 'pageSize=9999',
+ 'data.list', 'nickname', 'id',
+  1, 1800, 5000, 0, 1, '员工选择器专用-拉取全部在职员工');
+
+-- 3.2 部门列表数据源配置
+INSERT INTO wf_data_source_config
+(source_code, source_name, source_type, api_url, api_method,
+ response_path, label_field, value_field, children_field,
+ cache_enabled, cache_ttl, timeout, auth_type, status, remark)
+VALUES
+('dept', '部门列表(HR接口)', 1, '/api/dept/tree', 'GET',
+ 'data', 'deptName', 'id', 'children',
+ 1, 3600, 5000, 0, 1, '部门树-含下级部门嵌套');
+
+-- 3.3 成本中心数据源配置
+INSERT INTO wf_data_source_config
+(source_code, source_name, source_type, api_url, api_method, api_headers, api_params_template,
+ response_path, label_field, value_field,
+ cache_enabled, cache_ttl, timeout, auth_type, status, remark)
+VALUES
+('cost_center', '成本中心(HR接口)', 1, '/api/hr/cost-center/list', 'GET', '{"X-Service":"hr-service"}', 'status=active',
+ 'data.items', 'centerName', 'centerCode',
+  1, 1800, 5000, 0, 1, '所有启用状态的成本中心');
+
+-- 3.4 供应商数据源配置
+INSERT INTO wf_data_source_config
+(source_code, source_name, source_type, api_url, api_method, api_headers,
+ response_path, label_field, value_field,
+ cache_enabled, cache_ttl, timeout, auth_type, status, remark)
+VALUES
+('supplier', '供应商列表(ERP接口)', 1, '/api/erp/supplier/list', 'GET', '{"X-Service":"erp-service"}',
+ 'data.list', 'supplierName', 'supplierId',
+  1, 1800, 8000, 0, 1, '合格供应商名录');
+
+-- 3.5 客户数据源配置
+INSERT INTO wf_data_source_config
+(source_code, source_name, source_type, api_url, api_method, api_headers,
+ response_path, label_field, value_field,
+ cache_enabled, cache_ttl, timeout, auth_type, status, remark)
+VALUES
+('customer', '客户列表(CRM接口)', 1, '/api/crm/customer/list', 'GET', '{"X-Service":"crm-service"}',
+ 'data.records', 'customerName', 'customerId',
+  1, 1800, 8000, 0, 1, '签约客户名录');
+
+-- 3.6 预算科目数据源配置
+INSERT INTO wf_data_source_config
+(source_code, source_name, source_type, api_url, api_method, api_params_template,
+ response_path, label_field, value_field, children_field,
+ cache_enabled, cache_ttl, timeout, auth_type, status, remark)
+VALUES
+('budget_subject', '预算科目(预算系统)', 1, '/api/budget/subject/tree', 'GET', 'fiscalYear=${currentYear}',
+ 'data', 'subjectName', 'subjectCode', 'children',
+  1, 3600, 5000, 0, 1, '当前会计年度预算科目树');
+
+-- ============================================================
+-- 升级完成
+-- ============================================================
 -- ============================================================
 -- 升级完成
 -- ============================================================

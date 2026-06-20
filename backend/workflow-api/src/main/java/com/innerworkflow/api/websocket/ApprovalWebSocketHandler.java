@@ -2,7 +2,9 @@ package com.innerworkflow.api.websocket;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.innerworkflow.common.util.SecurityUtils;
+import com.innerworkflow.form.event.DictChangeEvent;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
@@ -10,6 +12,8 @@ import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
@@ -95,6 +99,39 @@ public class ApprovalWebSocketHandler extends TextWebSocketHandler {
             log.debug("已向{}个订阅者推送审批单{}状态更新", subscribers.size(), instanceNo);
         } catch (Exception e) {
             log.warn("序列化WebSocket消息失败, instanceNo={}, error={}", instanceNo, e.getMessage());
+        }
+    }
+
+    @EventListener
+    public void onDictChange(DictChangeEvent event) {
+        if (userSessions.isEmpty()) {
+            return;
+        }
+        try {
+            Map<String, Object> message = new HashMap<>();
+            message.put("type", "dictChange");
+            message.put("dictCode", event.getDictCode());
+            message.put("changeType", event.getChangeType());
+            message.put("timestamp", System.currentTimeMillis());
+
+            String json = objectMapper.writeValueAsString(message);
+            TextMessage textMessage = new TextMessage(json);
+
+            int pushCount = 0;
+            for (WebSocketSession session : userSessions.values()) {
+                if (session.isOpen()) {
+                    try {
+                        session.sendMessage(textMessage);
+                        pushCount++;
+                    } catch (IOException e) {
+                        log.warn("推送字典变更WebSocket消息失败, sessionId={}, error={}", session.getId(), e.getMessage());
+                    }
+                }
+            }
+            log.debug("字典变更推送: dictCode={}, changeType={}, 已推送到{}个在线用户",
+                    event.getDictCode(), event.getChangeType(), pushCount);
+        } catch (Exception e) {
+            log.warn("序列化字典变更消息失败, dictCode={}, error={}", event.getDictCode(), e.getMessage());
         }
     }
 

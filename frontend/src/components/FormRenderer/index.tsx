@@ -16,6 +16,12 @@ import type { FormilySchema, FieldPermissionType } from '@/types/form'
 import { UserSelect } from '@/components/business/UserSelect'
 import { DeptSelect } from '@/components/business/DeptSelect'
 import { DictSelect } from '@/components/business/DictSelect'
+import {
+  DataSourceSelectWrap,
+  DataSourceCascaderWrap,
+  DataSourceRadioGroupWrap,
+  DataSourceCheckboxGroupWrap
+} from '@/components/business/DataSourceWraps'
 import { buildReactions } from '@/components/FormDesigner/FormPreviewer'
 
 export interface FormRendererProps {
@@ -213,6 +219,10 @@ const components: Record<string, any> = {
   DeptSelect,
   DictSelect,
   ViewText,
+  Select: DataSourceSelectWrap,
+  Cascader: DataSourceCascaderWrap,
+  'Radio.Group': DataSourceRadioGroupWrap,
+  'Checkbox.Group': DataSourceCheckboxGroupWrap,
   FormItem: AntdVRFC.FormItem,
   ArrayTable: AntdVRFC.ArrayTable
 }

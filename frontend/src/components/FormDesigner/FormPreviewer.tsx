@@ -15,6 +15,13 @@ import type {
 } from '@/types/form'
 import { UserSelect } from '@/components/business/UserSelect'
 import { DeptSelect } from '@/components/business/DeptSelect'
+import { DictSelect } from '@/components/business/DictSelect'
+import {
+  DataSourceSelectWrap,
+  DataSourceCascaderWrap,
+  DataSourceRadioGroupWrap,
+  DataSourceCheckboxGroupWrap
+} from '@/components/business/DataSourceWraps'
 
 interface FormPreviewerProps {
   open: boolean
@@ -27,6 +34,11 @@ const SchemaField = createSchemaField({
     ...AntdVRFC,
     UserSelect,
     DeptSelect,
+    DictSelect,
+    Select: DataSourceSelectWrap,
+    Cascader: DataSourceCascaderWrap,
+    'Radio.Group': DataSourceRadioGroupWrap,
+    'Checkbox.Group': DataSourceCheckboxGroupWrap,
     FormItem
   }
 })

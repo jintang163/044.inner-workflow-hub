@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { dictApi, dataSourceApi } from '@/api'
 import type { DictOptionItem, SysDictDataVO, DataSourceConfig } from '@/types/form'
-import type { DictChangeMessage } from '@/types/dict'
+import { dictCacheManager, ensureDictCacheManagerStarted } from '@/store/dictCache'
 
 const DICT_LOCAL_CACHE_PREFIX = 'dict_cache_'
 const DATASOURCE_LOCAL_CACHE_PREFIX = 'ds_cache_'
@@ -40,7 +40,7 @@ function setLocalCache(key: string, data: DictOptionItem[], ttl = DEFAULT_CACHE_
 }
 
 function removeLocalCache(key: string) {
-  localStorage.removeItem(key)
+  try { localStorage.removeItem(key) } catch {}
 }
 
 function convertDictDataToOptions(items: SysDictDataVO[]): DictOptionItem[] {
@@ -48,26 +48,31 @@ function convertDictDataToOptions(items: SysDictDataVO[]): DictOptionItem[] {
     label: item.dictLabel,
     value: item.dictValue,
     color: item.colorTag,
-    children: item.children ? convertDictDataToOptions(item.children) : undefined
+    children: item.children && item.children.length > 0
+      ? convertDictDataToOptions(item.children)
+      : undefined
   }))
 }
 
 export interface UseDictOptionsResult {
   options: DictOptionItem[]
   loading: boolean
-  refresh: () => void
+  refresh: (forceRemote?: boolean) => void
   getCascadeChildren: (parentValue: string) => Promise<DictOptionItem[]>
 }
 
 export function useDictOptions(
-  dataSource?: DataSourceConfig,
-  wsRef?: React.RefObject<{ lastMessage: any } | null>
+  dataSource?: DataSourceConfig
 ): UseDictOptionsResult {
   const [options, setOptions] = useState<DictOptionItem[]>([])
   const [loading, setLoading] = useState(false)
-  const refreshRef = useRef<(() => void) | null>(null)
+  const dataSourceType = dataSource?.type
+  const dictCode = dataSource?.dictCode
+  const sourceCode = dataSource?.sourceCode
+  const apiUrl = dataSource?.apiUrl
+  const optionsStr = JSON.stringify(dataSource?.options || [])
 
-  const loadOptions = useCallback(async () => {
+  const loadOptions = useCallback(async (forceRemote = false) => {
     if (!dataSource) {
       setOptions([])
       return
@@ -88,14 +93,16 @@ export function useDictOptions(
             break
           }
           const cacheKey = DICT_LOCAL_CACHE_PREFIX + dataSource.dictCode
-          const cached = getLocalCache(cacheKey)
-          if (cached) {
-            result = cached
-            break
+          if (!forceRemote) {
+            const cached = getLocalCache(cacheKey)
+            if (cached) {
+              result = cached
+              break
+            }
           }
 
           const dedupeKey = `dict_${dataSource.dictCode}`
-          if (pendingRequests[dedupeKey]) {
+          if (!forceRemote && pendingRequests[dedupeKey]) {
             result = await pendingRequests[dedupeKey]
           } else {
             const promise = (async () => {
@@ -115,14 +122,16 @@ export function useDictOptions(
         case 'api': {
           if (dataSource.sourceCode) {
             const cacheKey = DATASOURCE_LOCAL_CACHE_PREFIX + dataSource.sourceCode
-            const cached = getLocalCache(cacheKey)
-            if (cached) {
-              result = cached
-              break
+            if (!forceRemote) {
+              const cached = getLocalCache(cacheKey)
+              if (cached) {
+                result = cached
+                break
+              }
             }
 
             const dedupeKey = `ds_${dataSource.sourceCode}`
-            if (pendingRequests[dedupeKey]) {
+            if (!forceRemote && pendingRequests[dedupeKey]) {
               result = await pendingRequests[dedupeKey]
             } else {
               const promise = dataSourceApi.fetchData(dataSource.sourceCode)
@@ -151,30 +160,35 @@ export function useDictOptions(
     } finally {
       setLoading(false)
     }
-  }, [dataSource?.type, dataSource?.dictCode, dataSource?.sourceCode, dataSource?.apiUrl,
-    JSON.stringify(dataSource?.options)])
+  }, [dataSourceType, dictCode, sourceCode, apiUrl, optionsStr])
 
-  const refresh = useCallback(() => {
+  const refresh = useCallback((forceRemote = true) => {
     if (!dataSource) return
-
-    if (dataSource.type === 'dict' && dataSource.dictCode) {
-      removeLocalCache(DICT_LOCAL_CACHE_PREFIX + dataSource.dictCode)
+    if (forceRemote) {
+      if (dataSource.type === 'dict' && dataSource.dictCode) {
+        removeLocalCache(DICT_LOCAL_CACHE_PREFIX + dataSource.dictCode)
+        dictCacheManager.clearDictLocalCache(dataSource.dictCode)
+      }
+      if (dataSource.type === 'api' && dataSource.sourceCode) {
+        dictCacheManager.clearDataSourceLocalCache(dataSource.sourceCode)
+      }
     }
-    if (dataSource.type === 'api' && dataSource.sourceCode) {
-      removeLocalCache(DATASOURCE_LOCAL_CACHE_PREFIX + dataSource.sourceCode)
-    }
-    loadOptions()
+    loadOptions(forceRemote)
   }, [dataSource, loadOptions])
-
-  refreshRef.current = refresh
 
   const getCascadeChildren = useCallback(async (parentValue: string): Promise<DictOptionItem[]> => {
     if (!dataSource || dataSource.type !== 'dict' || !dataSource.dictCode) {
       return []
     }
     try {
+      const cacheKey = DICT_LOCAL_CACHE_PREFIX + dataSource.dictCode + ':parent:' + parentValue
+      const cached = getLocalCache(cacheKey)
+      if (cached) return cached
+
       const data = await dictApi.cascadeData(dataSource.dictCode, parentValue)
-      return convertDictDataToOptions(data)
+      const opts = convertDictDataToOptions(data)
+      setLocalCache(cacheKey, opts)
+      return opts
     } catch (err) {
       console.warn('[useDictOptions] 加载级联数据失败:', err)
       return []
@@ -182,19 +196,21 @@ export function useDictOptions(
   }, [dataSource?.type, dataSource?.dictCode])
 
   useEffect(() => {
+    ensureDictCacheManagerStarted()
     loadOptions()
   }, [loadOptions])
 
   useEffect(() => {
-    if (!wsRef?.current?.lastMessage) return
-    const msg = wsRef.current.lastMessage as DictChangeMessage
-    if (msg.type !== 'dictChange') return
-    if (dataSource?.type === 'dict' && dataSource.dictCode === msg.dictCode) {
-      if (refreshRef.current) {
-        refreshRef.current()
+    if (!dataSource || dataSource.type !== 'dict' || !dataSource.dictCode) return
+    const myDictCode = dataSource.dictCode
+
+    const unsubscribe = dictCacheManager.subscribe((changedDictCode: string, _changeType: string) => {
+      if (changedDictCode === myDictCode) {
+        loadOptions(true)
       }
-    }
-  }, [wsRef?.current?.lastMessage, dataSource?.type, dataSource?.dictCode])
+    })
+    return unsubscribe
+  }, [dataSource?.type, dataSource?.dictCode, loadOptions])
 
   return { options, loading, refresh, getCascadeChildren }
 }
@@ -207,7 +223,7 @@ export function useDictOptionsSimple(dictCode: string): UseDictOptionsResult {
   return useDictOptions(dataSource)
 }
 
-export function useDataSourceOptions(sourceCode: string, params?: Record<string, any>): UseDictOptionsResult {
+export function useDataSourceOptions(sourceCode: string): UseDictOptionsResult {
   const dataSource: DataSourceConfig = {
     type: 'api',
     sourceCode,
