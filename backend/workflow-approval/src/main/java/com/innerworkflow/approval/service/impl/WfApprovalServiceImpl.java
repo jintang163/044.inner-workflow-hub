@@ -46,7 +46,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
 
-import java.util.Date;
+import com.innerworkflow.form.service.WfFormDraftService;
 
 @Slf4j
 @Service
@@ -77,6 +77,7 @@ public class WfApprovalServiceImpl implements WfApprovalService {
     private final WfTransferRecordService transferRecordService;
     private final SysUserService sysUserService;
     private final ApplicationEventPublisher eventPublisher;
+    private final WfFormDraftService formDraftService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -158,6 +159,15 @@ public class WfApprovalServiceImpl implements WfApprovalService {
 
         log.info("流程发起成功, instanceNo={}, processKey={}, startUserId={}",
                 instanceNo, dto.getProcessKey(), userId);
+
+        if (dto.getDraftId() != null) {
+            try {
+                formDraftService.deleteDraft(dto.getDraftId());
+                log.info("流程发起成功，已删除对应草稿, draftId={}, instanceNo={}", dto.getDraftId(), instanceNo);
+            } catch (Exception e) {
+                log.warn("删除草稿失败, draftId={}, error={}", dto.getDraftId(), e.getMessage());
+            }
+        }
 
         return instanceNo;
     }

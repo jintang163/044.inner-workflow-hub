@@ -31,4 +31,6 @@ public class WfStartProcessDTO implements Serializable {
     private Integer priority;
 
     private String remark;
+
+    private Long draftId;
 }

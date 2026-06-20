@@ -191,7 +191,7 @@ export const approvalApi = {
   withdraw: (data: { instanceId: number; comment?: string }) =>
     request<void>({ url: '/api/approval/withdraw', method: 'post', data }),
   start: (data: StartProcessDTO) =>
-    request<ProcessInstanceVO>({ url: '/api/approval/start', method: 'post', data }),
+    request<string>({ url: '/api/approval/start', method: 'post', data }),
   batchApprove: (data: { taskIds: string[]; comment?: string; signatureUrl?: string }) =>
     request<void>({ url: '/api/approval/batch-approve', method: 'post', data }),
   batchReject: (data: { taskIds: string[]; comment?: string }) =>

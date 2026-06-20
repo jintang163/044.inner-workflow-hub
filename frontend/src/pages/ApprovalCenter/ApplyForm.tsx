@@ -23,7 +23,8 @@ import {
   Col,
   Spin,
   Switch,
-  Alert
+  Alert,
+  Form
 } from 'antd'
 import {
   ArrowLeftOutlined,
@@ -154,84 +155,6 @@ const mockCategoryTree: ProcessCategoryVO[] = [
 
 const icons = ['📝', '💰', '📋', '📄', '🖋️', '🏢', '🚗', '🎯', '⭐', '📊']
 
-const mockProcesses: StartableProcessVO[] = [
-  {
-    id: 101, processName: '年假申请', processKey: 'leave_annual',
-    categoryId: 11, categoryName: '请假审批',
-    icon: '📝', description: '员工年度休假申请流程',
-    formId: 1, formVersion: 1
-  },
-  {
-    id: 102, processName: '事假申请', processKey: 'leave_personal',
-    categoryId: 11, categoryName: '请假审批',
-    icon: '📝', description: '员工因私请假申请',
-    formId: 2, formVersion: 1
-  },
-  {
-    id: 103, processName: '病假申请', processKey: 'leave_sick',
-    categoryId: 11, categoryName: '请假审批',
-    icon: '📝', description: '员工病假申请（需附诊断证明）',
-    formId: 3, formVersion: 1
-  },
-  {
-    id: 201, processName: '日常费用报销', processKey: 'expense_daily',
-    categoryId: 21, categoryName: '日常报销',
-    icon: '💰', description: '日常办公费用报销',
-    formId: 4, formVersion: 1
-  },
-  {
-    id: 202, processName: '差旅报销', processKey: 'expense_travel',
-    categoryId: 22, categoryName: '差旅费报销',
-    icon: '🚗', description: '出差差旅费用报销',
-    formId: 5, formVersion: 1
-  },
-  {
-    id: 301, processName: '办公用品采购', processKey: 'purchase_supplies',
-    categoryId: 31, categoryName: '采购申请',
-    icon: '📋', description: '办公用品采购申请',
-    formId: 6, formVersion: 1
-  },
-  {
-    id: 302, processName: '设备采购申请', processKey: 'purchase_equipment',
-    categoryId: 31, categoryName: '采购申请',
-    icon: '📊', description: 'IT设备及固定资产采购',
-    formId: 7, formVersion: 1
-  },
-  {
-    id: 303, processName: '采购合同审批', processKey: 'contract_purchase',
-    categoryId: 32, categoryName: '合同审批',
-    icon: '📄', description: '采购类合同审批流程',
-    formId: 8, formVersion: 1
-  },
-  {
-    id: 401, processName: '员工入职审批', processKey: 'hr_onboard',
-    categoryId: 41, categoryName: '入职办理',
-    icon: '⭐', description: '新员工入职流程审批',
-    formId: 9, formVersion: 1
-  },
-  {
-    id: 402, processName: '离职申请', processKey: 'hr_resign',
-    categoryId: 42, categoryName: '离职申请',
-    icon: '🖋️', description: '员工离职申请及交接审批',
-    formId: 10, formVersion: 1
-  }
-]
-
-const mockDrafts: DraftVO[] = [
-  {
-    id: 9001, processKey: 'leave_annual', processName: '年假申请',
-    title: '2024年7月年假申请',
-    formData: { leaveDays: 5, startDate: '2024-07-01', reason: '家庭出游' },
-    updateTime: dayjs().subtract(2, 'hour').format('YYYY-MM-DD HH:mm:ss')
-  },
-  {
-    id: 9002, processKey: 'expense_travel', processName: '差旅报销',
-    title: '上海出差费用报销',
-    formData: { totalAmount: 3500, city: '上海' },
-    updateTime: dayjs().subtract(1, 'day').format('YYYY-MM-DD HH:mm:ss')
-  }
-]
-
 const categoryToTreeData = (categories: ProcessCategoryVO[]): DataNode[] => {
   return categories.map(cat => ({
     key: String(cat.id),
@@ -263,7 +186,8 @@ const ApplyForm: React.FC = () => {
 
   const [categoryTree] = useState<DataNode[]>(categoryToTreeData(mockCategoryTree))
   const [selectedCategory, setSelectedCategory] = useState<string[]>([])
-  const [processList, setProcessList] = useState<StartableProcessVO[]>(mockProcesses)
+  const [processList, setProcessList] = useState<StartableProcessVO[]>([])
+  const [processLoadError, setProcessLoadError] = useState<string>('')
   const [selectedProcess, setSelectedProcess] = useState<StartableProcessVO | null>(null)
 
   const [formSchema, setFormSchema] = useState<FormilySchema | null>(null)
@@ -336,15 +260,23 @@ const ApplyForm: React.FC = () => {
 
   const loadProcesses = useCallback(async () => {
     setLoading(true)
+    setProcessLoadError('')
     try {
-      let list = mockProcesses
+      const list = await approvalApi.startableList()
+      let filteredList = list || []
       if (selectedCategory.length > 0) {
         const catId = Number(selectedCategory[selectedCategory.length - 1])
-        list = list.filter(p => p.categoryId === catId || p.categoryId.toString().startsWith(selectedCategory[0]))
+        filteredList = filteredList.filter(p => p.categoryId === catId || p.categoryId.toString().startsWith(selectedCategory[0]))
       }
-      setProcessList(list)
+      setProcessList(filteredList)
+      if (filteredList.length === 0 && list && list.length > 0) {
+        setProcessLoadError('该分类下暂无可用流程')
+      }
     } catch (err: any) {
-      message.error(err?.message || '加载流程列表失败')
+      const errMsg = err?.message || '加载流程列表失败'
+      setProcessLoadError(errMsg)
+      message.error(errMsg)
+      setProcessList([])
     } finally {
       setLoading(false)
     }
@@ -370,6 +302,60 @@ const ApplyForm: React.FC = () => {
   useEffect(() => {
     loadDrafts()
   }, [loadDrafts])
+
+  const loadDraftFromUrl = useCallback(async (urlDraftId: number) => {
+    try {
+      setLoading(true)
+      const draft = await formApi.draftGet(urlDraftId)
+      if (!draft) {
+        message.warning('草稿不存在或已被删除')
+        return
+      }
+      await loadProcesses()
+      const process = processList.find(p => p.processKey === draft.processKey || p.id === draft.processDefinitionId)
+      if (!process) {
+        message.warning(`草稿对应的流程【${draft.processName}】暂无可发起版本，请先联系管理员发布流程`)
+        return
+      }
+      await handleProcessSelect(process)
+      setTimeout(() => {
+        if (formRendererRef.current && draft.formData) {
+          Object.entries(draft.formData || {}).forEach(([k, v]) => {
+            formRendererRef.current?.setFieldValue(k, v)
+          })
+        }
+        setFormValues({ ...draft.formData })
+        if (draft.ccUserIds?.length) {
+          setCcUserIds(draft.ccUserIds)
+        }
+        if (draft.attachmentIds?.length) {
+          loadDraftAttachments(draft.attachmentIds)
+        }
+      }, 100)
+      autoSaveHook.setDraftId(draft.id)
+      autoSaveHook.setDraftNo(draft.draftNo)
+      setCurrentStep(1)
+      setShowDrafts(false)
+      enableAutoSave()
+      message.success('已加载草稿内容')
+    } catch (err: any) {
+      message.error(err?.message || '加载草稿失败')
+    } finally {
+      setLoading(false)
+    }
+  }, [processList, loadProcesses, handleProcessSelect, autoSaveHook, enableAutoSave])
+
+  useEffect(() => {
+    if (draftIdFromUrl && processList.length > 0) {
+      loadDraftFromUrl(Number(draftIdFromUrl))
+    }
+  }, [draftIdFromUrl, processList.length, loadDraftFromUrl])
+
+  useEffect(() => {
+    if (draftIdFromUrl && processList.length === 0) {
+      loadProcesses()
+    }
+  }, [draftIdFromUrl, processList.length, loadProcesses])
 
   const checkLocalDraft = useCallback((processKey: string) => {
     const localData = loadFromLocalStorage()
@@ -484,9 +470,16 @@ const ApplyForm: React.FC = () => {
         attachmentIds: attIds,
         draftId: draftId || undefined
       }
-      // const res = await approvalApi.start(submitData)
+      await approvalApi.start(submitData)
       message.success('审批发起成功！')
       clearLocalStorage()
+      if (draftId) {
+        try {
+          await formApi.draftRemove(draftId)
+        } catch (e) {
+          console.warn('清理草稿失败:', e)
+        }
+      }
       navigate('/approval/my-apply')
     } catch (err: any) {
       message.error(err?.message || '提交失败')
@@ -512,25 +505,50 @@ const ApplyForm: React.FC = () => {
   }
 
   const handleContinueDraft = async (draft: DraftVO) => {
-    const process = mockProcesses.find(p => p.processKey === draft.processKey)
-    if (process) {
-      await handleProcessSelect(process)
-      setTimeout(() => {
-        if (formRendererRef.current && draft.formData) {
-          Object.entries(draft.formData || {}).forEach(([k, v]) => {
-            formRendererRef.current?.setFieldValue(k, v)
-          })
-        }
-        setFormValues({ ...draft.formData })
-        if (draft.ccUserIds?.length) {
-          setCcUserIds(draft.ccUserIds)
-        }
-      }, 100)
-      autoSaveHook.setDraftId(draft.id)
-      autoSaveHook.setDraftNo(draft.draftNo)
-      setCurrentStep(1)
-      setShowDrafts(false)
-      enableAutoSave()
+    const process = processList.find(p => p.processKey === draft.processKey || p.id === draft.processDefinitionId)
+    if (!process) {
+      message.warning(`草稿对应的流程【${draft.processName}】暂无可发起版本，请先联系管理员发布流程`)
+      return
+    }
+    await handleProcessSelect(process)
+    setTimeout(() => {
+      if (formRendererRef.current && draft.formData) {
+        Object.entries(draft.formData || {}).forEach(([k, v]) => {
+          formRendererRef.current?.setFieldValue(k, v)
+        })
+      }
+      setFormValues({ ...draft.formData })
+      if (draft.ccUserIds?.length) {
+        setCcUserIds(draft.ccUserIds)
+      }
+      if (draft.attachmentIds?.length) {
+        loadDraftAttachments(draft.attachmentIds)
+      }
+    }, 100)
+    autoSaveHook.setDraftId(draft.id)
+    autoSaveHook.setDraftNo(draft.draftNo)
+    setCurrentStep(1)
+    setShowDrafts(false)
+    enableAutoSave()
+  }
+
+  const loadDraftAttachments = async (attachmentIds: number[]) => {
+    try {
+      const attachments = await approvalApi.attachmentListByIds(attachmentIds)
+      if (attachments && attachments.length > 0) {
+        const uploadFiles: UploadFile[] = attachments.map(att => ({
+          uid: String(att.id),
+          name: att.fileName,
+          size: att.fileSize,
+          status: 'done',
+          response: att
+        }))
+        setFileList(uploadFiles)
+        const attIds = attachments.map(a => a.id)
+        updateAttachmentIds(attIds)
+      }
+    } catch (err: any) {
+      console.warn('加载草稿附件失败:', err?.message)
     }
   }
 
@@ -758,12 +776,34 @@ const ApplyForm: React.FC = () => {
                 <Space>
                   <span>可选流程</span>
                   <Tag color="blue">{processList.length} 个</Tag>
+                  {processLoadError && (
+                    <Tag color="red">加载失败</Tag>
+                  )}
                 </Space>
               }
               bodyStyle={{ padding: 16 }}
               loading={loading}
+              extra={
+                processLoadError ? (
+                  <Button size="small" onClick={loadProcesses} icon={<CloudUploadOutlined />}>
+                    重新加载
+                  </Button>
+                ) : null
+              }
             >
-              {processList.length === 0 ? (
+              {processLoadError ? (
+                <Alert
+                  message="加载失败"
+                  description={processLoadError}
+                  type="error"
+                  showIcon
+                  action={
+                    <Button size="small" type="primary" onClick={loadProcesses}>
+                      重试
+                    </Button>
+                  }
+                />
+              ) : processList.length === 0 ? (
                 <Empty description="该分类下暂无可用流程" />
               ) : (
                 <Row gutter={[16, 16]}>
