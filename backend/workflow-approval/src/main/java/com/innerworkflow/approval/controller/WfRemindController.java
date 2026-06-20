@@ -1,11 +1,13 @@
 package com.innerworkflow.approval.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.innerworkflow.approval.dto.WfBatchRemindDTO;
 import com.innerworkflow.approval.dto.WfTaskRemindDTO;
 import com.innerworkflow.approval.entity.WfEscalationHistory;
 import com.innerworkflow.approval.entity.WfTimeoutRemind;
 import com.innerworkflow.approval.service.WfEscalationHistoryService;
 import com.innerworkflow.approval.service.WfTimeoutRemindService;
+import com.innerworkflow.approval.vo.WfBatchRemindResultVO;
 import com.innerworkflow.common.dto.PageQuery;
 import com.innerworkflow.common.result.R;
 import io.swagger.v3.oas.annotations.Operation;
@@ -14,6 +16,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Tag(name = "催办与升级", description = "催办与升级相关接口")
@@ -30,6 +33,25 @@ public class WfRemindController {
     public R<Void> manualRemind(@Valid @RequestBody WfTaskRemindDTO dto) {
         timeoutRemindService.manualRemind(dto.getTaskId(), dto.getRemark());
         return R.success();
+    }
+
+    @Operation(summary = "批量催办任务")
+    @PostMapping("/batch")
+    public R<WfBatchRemindResultVO> batchRemind(@Valid @RequestBody WfBatchRemindDTO dto) {
+        return R.success(timeoutRemindService.batchRemind(dto));
+    }
+
+    @Operation(summary = "获取任务上次催办时间")
+    @GetMapping("/{taskId}/last-time")
+    public R<LocalDateTime> getLastRemindTime(@PathVariable Long taskId) {
+        return R.success(timeoutRemindService.getLastRemindTime(taskId));
+    }
+
+    @Operation(summary = "检查是否可以催办（间隔校验）")
+    @GetMapping("/{taskId}/can-remind")
+    public R<Boolean> canRemind(@PathVariable Long taskId,
+                                @RequestParam(defaultValue = "5") Integer intervalMinutes) {
+        return R.success(timeoutRemindService.checkRemindInterval(taskId, intervalMinutes));
     }
 
     @Operation(summary = "查询任务催办记录(分页)")

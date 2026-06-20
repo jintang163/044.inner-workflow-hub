@@ -481,3 +481,20 @@ export interface CommentTemplateQueryDTO {
   status?: number
   sortBy?: string
 }
+
+export interface BatchRemindDTO {
+  taskIds: number[]
+  remark?: string
+}
+
+export interface BatchRemindResultVO {
+  totalCount: number
+  successCount: number
+  failCount: number
+  remindMessageCount: number
+  failItems: Array<{
+    taskId: number
+    taskNo: string
+    reason: string
+  }>
+}

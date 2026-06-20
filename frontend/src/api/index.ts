@@ -41,7 +41,9 @@ import {
   CommentTemplateCategoryVO,
   CommentTemplateSaveDTO,
   CommentTemplateCategorySaveDTO,
-  CommentTemplateQueryDTO
+  CommentTemplateQueryDTO,
+  BatchRemindDTO,
+  BatchRemindResultVO
 } from '@/types/approval'
 import {
   TenantVO,
@@ -334,6 +336,19 @@ export const approvalApi = {
     request<void>({ url: `/api/approval/comment-template/status/${id}`, method: 'put', params: { status } }),
   commentTemplateUse: (id: number) =>
     request<void>({ url: `/api/approval/comment-template/use/${id}`, method: 'post' }),
+
+  manualRemind: (data: { taskId: number; remark?: string }) =>
+    request<void>({ url: '/api/approval/remind/manual', method: 'post', data }),
+  batchRemind: (data: BatchRemindDTO) =>
+    request<BatchRemindResultVO>({ url: '/api/approval/remind/batch', method: 'post', data }),
+  getLastRemindTime: (taskId: number) =>
+    request<string>({ url: `/api/approval/remind/${taskId}/last-time`, method: 'get' }),
+  canRemind: (taskId: number, intervalMinutes?: number) =>
+    request<boolean>({
+      url: `/api/approval/remind/${taskId}/can-remind`,
+      method: 'get',
+      params: intervalMinutes !== undefined ? { intervalMinutes } : undefined
+    }),
 }
 
 export const notifyApi = {

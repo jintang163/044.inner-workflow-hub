@@ -1,19 +1,21 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Card, Table, Space, Button, message, Modal, Form, Input } from 'antd'
+import { Card, Table, Space, Button, message, Modal, Form, Input, Alert, List, Tag } from 'antd'
 import {
   ReloadOutlined,
   PlusOutlined,
   CheckCircleOutlined,
   ExclamationCircleOutlined,
-  SwapOutlined
+  SwapOutlined,
+  BellOutlined,
+  CloseCircleOutlined
 } from '@ant-design/icons'
 import type { TableRowSelection } from 'antd/es/table/interface'
 import TaskFilterBar, { FilterValues } from './components/TaskFilterBar'
 import { getTodoColumns } from './components/TaskTableColumns'
 import BatchApprovalDrawer from './components/BatchApprovalDrawer'
 import { approvalApi, aiApi } from '@/api'
-import type { ApprovalTaskVO, BatchTransferDTO } from '@/types/approval'
+import type { ApprovalTaskVO, BatchTransferDTO, BatchRemindResultVO } from '@/types/approval'
 import type { PageResult } from '@/types'
 import UserSelect from '@/components/business/UserSelect'
 
@@ -33,6 +35,9 @@ const TodoList: React.FC = () => {
   const [transferModalVisible, setTransferModalVisible] = useState(false)
   const [transferAll, setTransferAll] = useState(false)
   const [transferForm] = Form.useForm()
+  const [remindModalVisible, setRemindModalVisible] = useState(false)
+  const [remindResult, setRemindResult] = useState<BatchRemindResultVO | null>(null)
+  const [remindForm] = Form.useForm()
 
   const fetchData = useCallback(async (pageNum = 1, pageSize = 10, filters?: FilterValues) => {
     setLoading(true)
@@ -210,6 +215,42 @@ const TodoList: React.FC = () => {
     }
   }
 
+  const handleBatchRemind = () => {
+    setRemindResult(null)
+    remindForm.resetFields()
+    setRemindModalVisible(true)
+  }
+
+  const handleRemindSubmit = async () => {
+    try {
+      const values = await remindForm.validateFields()
+      setActionLoading(true)
+
+      const result = await approvalApi.batchRemind({
+        taskIds: selectedRows.map(r => r.id),
+        remark: values.remark
+      })
+
+      setRemindResult(result)
+
+      if (result.successCount > 0 && result.failCount === 0) {
+        message.success(`批量催办成功，共发送 ${result.remindMessageCount} 条通知`)
+        setRemindModalVisible(false)
+        setSelectedRowKeys([])
+        setSelectedRows([])
+        fetchData(data.pageNum, data.pageSize, filterValues)
+      } else if (result.successCount > 0) {
+        message.warning(`部分催办成功 ${result.successCount} 条，失败 ${result.failCount} 条`)
+      } else {
+        message.error(`批量催办全部失败`)
+      }
+    } catch (err: any) {
+      message.error(err?.message || '操作失败')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
   const columns = getTodoColumns({
     keyword,
     onViewDetail: handleViewDetail,
@@ -244,6 +285,13 @@ const TodoList: React.FC = () => {
               onClick={() => setDrawerOpen(true)}
             >
               批量审批（{selectedRowKeys.length}）
+            </Button>
+            <Button
+              disabled={selectedRowKeys.length === 0}
+              icon={<BellOutlined />}
+              onClick={handleBatchRemind}
+            >
+              批量催办
             </Button>
             <Button
               disabled={selectedRowKeys.length === 0}
@@ -319,6 +367,104 @@ const TodoList: React.FC = () => {
             <TextArea rows={3} placeholder="请输入转审原因（可选）" maxLength={200} />
           </Form.Item>
         </Form>
+      </Modal>
+
+      <Modal
+        title={
+          <Space>
+            <BellOutlined style={{ color: '#faad14' }} />
+            <span>批量催办（{selectedRows.length} 条任务）</span>
+          </Space>
+        }
+        open={remindModalVisible}
+        onOk={handleRemindSubmit}
+        onCancel={() => {
+          setRemindModalVisible(false)
+          setRemindResult(null)
+        }}
+        confirmLoading={actionLoading}
+        okText={remindResult ? '关闭' : '确认催办'}
+        cancelText="取消"
+        okButtonProps={remindResult ? { onClick: () => setRemindModalVisible(false) } : undefined}
+        width={520}
+      >
+        {remindResult ? (
+          <Space direction="vertical" size={12} style={{ width: '100%' }}>
+            <Alert
+              message={
+                <Space>
+                  {remindResult.failCount === 0 ? (
+                    <><CheckCircleOutlined style={{ color: '#52c41a' }} /> 全部催办成功</>
+                  ) : remindResult.successCount === 0 ? (
+                    <><CloseCircleOutlined style={{ color: '#ff4d4f' }} /> 全部催办失败</>
+                  ) : (
+                    <><ExclamationCircleOutlined style={{ color: '#faad14' }} /> 部分催办成功</>
+                  )}
+                </Space>
+              }
+              description={`成功 ${remindResult.successCount} 条，失败 ${remindResult.failCount} 条，发送通知 ${remindResult.remindMessageCount} 条`}
+              type={remindResult.failCount === 0 ? 'success' : remindResult.successCount === 0 ? 'error' : 'warning'}
+              showIcon={false}
+            />
+            {remindResult.failItems.length > 0 && (
+              <div>
+                <div style={{ fontWeight: 500, marginBottom: 8 }}>失败详情：</div>
+                <List
+                  size="small"
+                  dataSource={remindResult.failItems}
+                  style={{ maxHeight: 200, overflowY: 'auto' }}
+                  renderItem={(item) => (
+                    <List.Item>
+                      <Space>
+                        <span style={{ color: '#999' }}>{item.taskNo}</span>
+                        <span style={{ color: '#ff4d4f' }}>{item.reason}</span>
+                      </Space>
+                    </List.Item>
+                  )}
+                />
+              </div>
+            )}
+          </Space>
+        ) : (
+          <Form form={remindForm} layout="vertical">
+            <Alert
+              message="催办说明"
+              description={
+                <div>
+                  <div>• 同一审批人多个待办将合并发送一条通知，避免刷屏</div>
+                  <div>• 同一任务 5 分钟内只能催办一次</div>
+                  <div>• 1 小时内最多催办 10 次</div>
+                  <div>• 只有发起人或管理员可以催办</div>
+                </div>
+              }
+              type="info"
+              showIcon
+              style={{ marginBottom: 16 }}
+            />
+            <Form.Item
+              name="remark"
+              label="催办留言"
+            >
+              <TextArea
+                rows={3}
+                placeholder="请输入催办留言（可选），如：请尽快处理此审批"
+                maxLength={200}
+                showCount
+              />
+            </Form.Item>
+            <Alert
+              message={
+                <Space>
+                  <span>已选择</span>
+                  <Tag color="blue">{selectedRows.length} 条</Tag>
+                  <span>待办任务进行催办</span>
+                </Space>
+              }
+              type="info"
+              showIcon={false}
+            />
+          </Form>
+        )}
       </Modal>
     </div>
   )
