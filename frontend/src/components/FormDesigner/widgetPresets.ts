@@ -63,6 +63,7 @@ export const WIDGET_PRESETS: WidgetConfig[] = [
     group: 'basic',
     component: 'Select',
     hasOptions: true,
+    hasDataSource: true,
     defaultSchema: {
       type: 'string',
       title: '选择器',
@@ -86,6 +87,7 @@ export const WIDGET_PRESETS: WidgetConfig[] = [
     group: 'basic',
     component: 'Select',
     hasOptions: true,
+    hasDataSource: true,
     defaultSchema: {
       type: 'array',
       title: '多选框',
@@ -164,6 +166,7 @@ export const WIDGET_PRESETS: WidgetConfig[] = [
     group: 'basic',
     component: 'Radio.Group',
     hasOptions: true,
+    hasDataSource: true,
     defaultSchema: {
       type: 'string',
       title: '单选组',
@@ -186,6 +189,7 @@ export const WIDGET_PRESETS: WidgetConfig[] = [
     group: 'basic',
     component: 'Checkbox.Group',
     hasOptions: true,
+    hasDataSource: true,
     defaultSchema: {
       type: 'array',
       title: '多选框组',
@@ -336,6 +340,7 @@ export const WIDGET_PRESETS: WidgetConfig[] = [
     group: 'advanced',
     component: 'Cascader',
     hasOptions: true,
+    hasDataSource: true,
     defaultSchema: {
       type: 'array',
       title: '级联选择',
@@ -362,6 +367,28 @@ export const WIDGET_PRESETS: WidgetConfig[] = [
             ]
           }
         ]
+      }
+    },
+    defaultProps: {}
+  },
+  {
+    name: 'dictselect',
+    label: '字典选择',
+    icon: 'BookOutlined',
+    group: 'advanced',
+    component: 'DictSelect',
+    hasDataSource: true,
+    defaultSchema: {
+      type: 'string',
+      title: '字典选择',
+      'x-decorator': 'FormItem',
+      'x-component': 'DictSelect',
+      'x-component-props': {
+        placeholder: '请选择',
+        dataSource: {
+          type: 'dict',
+          dictCode: ''
+        }
       }
     },
     defaultProps: {}

@@ -51,6 +51,12 @@ import {
   AiRecommendationVO,
   AiStatsVO
 } from '@/types/ai'
+import {
+  SysDictTypeVO,
+  SysDictDataVO,
+  WfDataSourceConfigVO,
+  DictOptionItem
+} from '@/types/dict'
 
 export const authApi = {
   login: (data: LoginDTO) => request<LoginVO>({ url: '/auth/login', method: 'post', data }),
@@ -306,6 +312,56 @@ export const aiApi = {
     request<void>({ url: '/ai/trigger-training', method: 'post' })
 }
 
+export const dictApi = {
+  typeList: () =>
+    request<SysDictTypeVO[]>({ url: '/system/dict/type/list', method: 'get' }),
+  typeDetail: (id: number) =>
+    request<SysDictTypeVO>({ url: `/system/dict/type/${id}`, method: 'get' }),
+  typeSave: (data: any) =>
+    request<boolean>({ url: '/system/dict/type', method: 'post', data }),
+  typeUpdate: (data: any) =>
+    request<boolean>({ url: '/system/dict/type', method: 'put', data }),
+  typeRemove: (id: number) =>
+    request<boolean>({ url: `/system/dict/type/${id}`, method: 'delete' }),
+  dataList: (dictCode: string) =>
+    request<SysDictDataVO[]>({ url: `/system/dict/data/${dictCode}`, method: 'get' }),
+  cascadeData: (dictCode: string, parentValue?: string) =>
+    request<SysDictDataVO[]>({
+      url: `/system/dict/data/${dictCode}/cascade`,
+      method: 'get',
+      params: parentValue ? { parentValue } : undefined
+    }),
+  dataSave: (data: any) =>
+    request<boolean>({ url: '/system/dict/data', method: 'post', data }),
+  dataUpdate: (data: any) =>
+    request<boolean>({ url: '/system/dict/data', method: 'put', data }),
+  dataRemove: (id: number) =>
+    request<boolean>({ url: `/system/dict/data/${id}`, method: 'delete' }),
+  refreshCache: (dictCode: string) =>
+    request<void>({ url: `/system/dict/cache/refresh/${dictCode}`, method: 'post' }),
+  clearAllCache: () =>
+    request<void>({ url: '/system/dict/cache/clear', method: 'post' }),
+  getOptions: (dictCode: string) =>
+    request<DictOptionItem[]>({ url: `/system/dict/data/${dictCode}`, method: 'get' })
+}
+
+export const dataSourceApi = {
+  list: () =>
+    request<WfDataSourceConfigVO[]>({ url: '/system/datasource/list', method: 'get' }),
+  detail: (id: number) =>
+    request<WfDataSourceConfigVO>({ url: `/system/datasource/${id}`, method: 'get' }),
+  save: (data: any) =>
+    request<boolean>({ url: '/system/datasource', method: 'post', data }),
+  update: (data: any) =>
+    request<boolean>({ url: '/system/datasource', method: 'put', data }),
+  remove: (id: number) =>
+    request<boolean>({ url: `/system/datasource/${id}`, method: 'delete' }),
+  fetchData: (sourceCode: string, params?: Record<string, any>) =>
+    request<DictOptionItem[]>({ url: `/system/datasource/fetch/${sourceCode}`, method: 'post', data: params || {} }),
+  refreshCache: (sourceCode: string) =>
+    request<void>({ url: `/system/datasource/cache/refresh/${sourceCode}`, method: 'post' })
+}
+
 const api = {
   auth: authApi,
   user: userApi,
@@ -317,7 +373,9 @@ const api = {
   approval: approvalApi,
   notify: notifyApi,
   tenant: tenantApi,
-  ai: aiApi
+  ai: aiApi,
+  dict: dictApi,
+  dataSource: dataSourceApi
 }
 
 export default api

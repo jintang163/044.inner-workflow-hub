@@ -141,6 +141,11 @@ function WidgetPropertiesPanel(props: WidgetPropertiesPanelProps) {
     return preset?.hasOptions || componentType === 'Cascader'
   }, [componentType])
 
+  const hasDataSource = useMemo(() => {
+    const preset = WIDGET_PRESETS.find(w => w.component === componentType)
+    return preset?.hasDataSource || componentType === 'DictSelect'
+  }, [componentType])
+
   const componentProps = useMemo(() => {
     return fieldSchema?.['x-component-props'] || {}
   }, [fieldSchema])
@@ -1160,6 +1165,58 @@ function WidgetPropertiesPanel(props: WidgetPropertiesPanelProps) {
                           }}
                         />
                       </Form.Item>
+                    )}
+
+                    {(componentType === 'DictSelect' || hasDataSource) && (
+                      <>
+                        <Divider style={{ margin: '8px 0' }} orientation="left">
+                          <span style={{ fontSize: 12 }}>数据源配置</span>
+                        </Divider>
+                        <Form.Item label="数据来源">
+                          <Select
+                            value={componentProps.dataSource?.type || 'static'}
+                            onChange={(val) => {
+                              const ds = { ...(componentProps.dataSource || {}) }
+                              ds.type = val
+                              if (val === 'dict') {
+                                ds.dictCode = ds.dictCode || ''
+                              } else if (val === 'api') {
+                                ds.sourceCode = ds.sourceCode || ''
+                              }
+                              updateComponentProp('dataSource', ds)
+                            }}
+                            options={[
+                              { label: '静态选项', value: 'static' },
+                              { label: '数据字典', value: 'dict' },
+                              { label: 'API数据源', value: 'api' }
+                            ]}
+                          />
+                        </Form.Item>
+                        {componentProps.dataSource?.type === 'dict' && (
+                          <Form.Item label="字典编码">
+                            <Input
+                              value={componentProps.dataSource?.dictCode || ''}
+                              onChange={(e) => {
+                                const ds = { ...componentProps.dataSource, dictCode: e.target.value }
+                                updateComponentProp('dataSource', ds)
+                              }}
+                              placeholder="请输入字典编码"
+                            />
+                          </Form.Item>
+                        )}
+                        {componentProps.dataSource?.type === 'api' && (
+                          <Form.Item label="数据源编码">
+                            <Input
+                              value={componentProps.dataSource?.sourceCode || ''}
+                              onChange={(e) => {
+                                const ds = { ...componentProps.dataSource, sourceCode: e.target.value }
+                                updateComponentProp('dataSource', ds)
+                              }}
+                              placeholder="请输入API数据源编码"
+                            />
+                          </Form.Item>
+                        )}
+                      </>
                     )}
 
                     {(componentType === 'ArrayTable') && (

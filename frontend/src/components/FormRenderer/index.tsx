@@ -15,6 +15,7 @@ import { Space, Tag, Input as AntdInput } from 'antd'
 import type { FormilySchema, FieldPermissionType } from '@/types/form'
 import { UserSelect } from '@/components/business/UserSelect'
 import { DeptSelect } from '@/components/business/DeptSelect'
+import { DictSelect } from '@/components/business/DictSelect'
 import { buildReactions } from '@/components/FormDesigner/FormPreviewer'
 
 export interface FormRendererProps {
@@ -106,7 +107,16 @@ const ViewText = observer((_props: any) => {
           </Space>
         )
       }
-      case 'Cascader': {
+      case 'Cascader':
+      case 'DictSelect': {
+        if (component === 'DictSelect') {
+          const dictOptions = field.componentProps?.options || []
+          if (Array.isArray(value)) {
+            return value.join(' / ')
+          }
+          const selected = dictOptions.find((o: any) => String(o.value) === String(value))
+          return <Tag>{selected?.label || value}</Tag>
+        }
         return Array.isArray(value) ? value.join(' / ') : String(value)
       }
       case 'UserSelect': {
@@ -201,6 +211,7 @@ const components: Record<string, any> = {
   ...AntdVRFC,
   UserSelect,
   DeptSelect,
+  DictSelect,
   ViewText,
   FormItem: AntdVRFC.FormItem,
   ArrayTable: AntdVRFC.ArrayTable

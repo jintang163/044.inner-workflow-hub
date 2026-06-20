@@ -47,6 +47,8 @@ export interface DataSourceConfig {
   options?: SelectOption[]
   apiUrl?: string
   dictCode?: string
+  sourceCode?: string
+  cascadeParentField?: string
 }
 
 export interface ValidatorRule {
