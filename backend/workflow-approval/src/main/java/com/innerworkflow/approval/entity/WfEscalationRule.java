@@ -11,8 +11,8 @@ import java.io.Serializable;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("wf_timeout_remind")
-public class WfTimeoutRemind implements Serializable {
+@TableName("wf_escalation_rule")
+public class WfEscalationRule implements Serializable {
 
     @Serial
     private static final long serialVersionUID = 1L;
@@ -20,28 +20,27 @@ public class WfTimeoutRemind implements Serializable {
     @TableId(value = "id", type = IdType.AUTO)
     private Long id;
 
-    private Long taskId;
+    private String ruleName;
 
-    private Long instanceId;
+    private String ruleCode;
 
-    private Long assigneeId;
+    private String processKey;
 
-    private Integer remindType;
-
-    private Integer remindSource;
-
-    private Long remindBy;
-
-    private String remark;
-
-    private Integer remindCount;
+    private String nodeId;
 
     private Integer escalateLevel;
 
-    private Long escalateToUserId;
+    private Integer timeoutHours;
 
-    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
-    private LocalDateTime remindTime;
+    private Integer escalateType;
+
+    private String escalateTarget;
+
+    private Integer escalateAction;
+
+    private Integer enabled;
+
+    private Integer sortOrder;
 
     private Long tenantId;
 
@@ -49,6 +48,8 @@ public class WfTimeoutRemind implements Serializable {
 
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime createTime;
+
+    private Long updateBy;
 
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime updateTime;
