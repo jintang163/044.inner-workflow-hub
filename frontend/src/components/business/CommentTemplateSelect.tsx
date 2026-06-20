@@ -1,16 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Button, Popover, Tag, Input, Empty, Spin } from 'antd'
+import { Button, Popover, Tag, Input, Empty, Spin, Tooltip, message } from 'antd'
 import {
   FormOutlined,
   FireOutlined,
   UserOutlined,
   TeamOutlined,
   GlobalOutlined,
-  SettingOutlined
+  SettingOutlined,
+  AudioOutlined,
+  AudioMutedOutlined
 } from '@ant-design/icons'
 import { approvalApi } from '@/api'
 import type { CommentTemplateVO, CommentTemplateCategoryVO } from '@/types/approval'
+import useSpeechRecognition from '@/hooks/useSpeechRecognition'
+import { addPunctuation, cleanTranscript } from '@/utils/speech'
 
 const { TextArea } = Input
 
@@ -43,8 +47,20 @@ const CommentTemplateSelect: React.FC<CommentTemplateSelectProps> = ({
   const [templates, setTemplates] = useState<CommentTemplateVO[]>([])
   const [activeCategory, setActiveCategory] = useState<number | null>(null)
   const [popoverOpen, setPopoverOpen] = useState(false)
+  const [speechPopoverOpen, setSpeechPopoverOpen] = useState(false)
 
   const textAreaRef = useRef<any>(null)
+
+  const {
+    isListening,
+    isSupported,
+    transcript,
+    interimTranscript,
+    error,
+    startListening,
+    stopListening,
+    resetTranscript
+  } = useSpeechRecognition({ lang: 'zh-CN' })
 
   useEffect(() => {
     loadTemplates()
@@ -75,6 +91,48 @@ const CommentTemplateSelect: React.FC<CommentTemplateSelectProps> = ({
     approvalApi.commentTemplateUse(template.id).catch(() => {})
     setPopoverOpen(false)
   }
+
+  useEffect(() => {
+    if (error) {
+      message.error(error)
+    }
+  }, [error])
+
+  const handleSpeechToggle = () => {
+    if (!isSupported) {
+      message.warning('当前浏览器不支持语音识别，请使用 Chrome 或 Edge 浏览器')
+      return
+    }
+    if (isListening) {
+      stopListening()
+    } else {
+      resetTranscript()
+      startListening()
+      setSpeechPopoverOpen(true)
+    }
+  }
+
+  const handleSpeechConfirm = () => {
+    const rawText = (transcript || '').trim()
+    if (rawText) {
+      const cleaned = cleanTranscript(rawText)
+      const withPunctuation = addPunctuation(cleaned)
+      const newValue = value ? value + (value.endsWith('\n') ? '' : '，') + withPunctuation : withPunctuation
+      onChange?.(newValue)
+      message.success('语音录入成功')
+    }
+    stopListening()
+    setSpeechPopoverOpen(false)
+    resetTranscript()
+  }
+
+  const handleSpeechCancel = () => {
+    stopListening()
+    setSpeechPopoverOpen(false)
+    resetTranscript()
+  }
+
+  const currentDisplayText = (transcript || '') + (interimTranscript || '')
 
   const getScopeIcon = (scopeType: number) => {
     switch (scopeType) {
@@ -235,6 +293,115 @@ const CommentTemplateSelect: React.FC<CommentTemplateSelectProps> = ({
     </div>
   )
 
+  const speechPopoverContent = (
+    <div style={{ width: 320 }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '20px 0',
+          marginBottom: 12
+        }}
+      >
+        <div
+          onClick={handleSpeechToggle}
+          style={{
+            width: 64,
+            height: 64,
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            backgroundColor: isListening ? '#ff4d4f' : '#1890ff',
+            color: '#fff',
+            boxShadow: isListening ? '0 0 0 8px rgba(255,77,79,0.2)' : '0 2px 8px rgba(24,144,255,0.3)',
+            transition: 'all 0.3s ease',
+            animation: isListening ? 'pulse 1.5s infinite' : 'none'
+          }}
+        >
+          {isListening ? (
+            <AudioMutedOutlined style={{ fontSize: 28 }} />
+          ) : (
+            <AudioOutlined style={{ fontSize: 28 }} />
+          )}
+        </div>
+      </div>
+
+      <div style={{ textAlign: 'center', marginBottom: 12 }}>
+        {isListening ? (
+          <div>
+            <div style={{ color: '#ff4d4f', fontWeight: 500 }}>正在聆听...</div>
+            <div style={{ fontSize: 12, color: '#999', marginTop: 4 }}>请说话，说完后点击确认</div>
+          </div>
+        ) : (
+          <div>
+            <div style={{ color: '#666' }}>已停止录音</div>
+            <div style={{ fontSize: 12, color: '#999', marginTop: 4 }}>点击图标继续录音</div>
+          </div>
+        )}
+      </div>
+
+      <div
+        style={{
+          padding: 12,
+          backgroundColor: '#fafafa',
+          borderRadius: 4,
+          minHeight: 80,
+          maxHeight: 150,
+          overflowY: 'auto',
+          marginBottom: 12
+        }}
+      >
+        {currentDisplayText ? (
+          <div>
+            <span>{transcript}</span>
+            {interimTranscript && (
+              <span style={{ color: '#999' }}>{interimTranscript}</span>
+            )}
+          </div>
+        ) : (
+          <div style={{ color: '#bbb', textAlign: 'center', padding: '12px 0' }}>
+            {isListening ? '等待语音输入...' : '暂无识别内容'}
+          </div>
+        )}
+      </div>
+
+      <div style={{ fontSize: 12, color: '#999', marginBottom: 12, padding: '0 4px' }}>
+        <div>• 支持说出标点符号：逗号、句号、问号等</div>
+        <div>• 系统会自动补全部分标点符号</div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 8 }}>
+        <Button
+          style={{ flex: 1 }}
+          onClick={handleSpeechCancel}
+        >
+          取消
+        </Button>
+        <Button
+          type="primary"
+          style={{ flex: 1 }}
+          onClick={handleSpeechConfirm}
+          disabled={!transcript}
+        >
+          确认填入
+        </Button>
+      </div>
+
+      <style>
+        {`
+          @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(255,77,79,0.4); }
+            70% { box-shadow: 0 0 0 16px rgba(255,77,79,0); }
+            100% { box-shadow: 0 0 0 0 rgba(255,77,79,0); }
+          }
+        `}
+      </style>
+    </div>
+  )
+
   return (
     <div style={{ position: 'relative' }}>
       <TextArea
@@ -246,7 +413,7 @@ const CommentTemplateSelect: React.FC<CommentTemplateSelectProps> = ({
         maxLength={maxLength}
         showCount={showCount}
         disabled={disabled}
-        style={{ paddingRight: 100 }}
+        style={{ paddingRight: 160 }}
       />
       <div
         style={{
@@ -257,6 +424,32 @@ const CommentTemplateSelect: React.FC<CommentTemplateSelectProps> = ({
           gap: 4
         }}
       >
+        <Tooltip title={isSupported ? '语音录入' : '当前浏览器不支持语音识别'}>
+          <Popover
+            content={speechPopoverContent}
+            title="语音录入审批意见"
+            trigger="click"
+            open={speechPopoverOpen}
+            onOpenChange={(open) => {
+              if (!open && isListening) {
+                stopListening()
+              }
+              setSpeechPopoverOpen(open)
+            }}
+            placement="bottomRight"
+            arrow={false}
+          >
+            <Button
+              type={isListening ? 'primary' : 'text'}
+              size="small"
+              danger={isListening}
+              icon={isListening ? <AudioMutedOutlined /> : <AudioOutlined />}
+              disabled={disabled}
+            >
+              语音
+            </Button>
+          </Popover>
+        </Tooltip>
         <Popover
           content={templatePopoverContent}
           title="选择意见模板"
