@@ -147,11 +147,41 @@ export interface StartableProcessVO {
 
 export interface DraftVO {
   id: number
+  draftNo: string
+  processDefinitionId: number
   processKey: string
+  processVersionId?: number
   processName: string
   title: string
+  formId: number
+  formVersion: number
   formData: Record<string, any>
+  draftStatus?: number
+  draftStatusName?: string
+  lastAutoSaveTime?: string
+  autoSaveCount?: number
+  attachmentIds?: number[]
+  ccUserIds?: number[]
+  creatorId?: number
+  creatorName?: string
+  createTime: string
   updateTime: string
+}
+
+export interface DraftSaveDTO {
+  id?: number
+  draftNo?: string
+  processDefinitionId: number
+  processKey: string
+  processVersionId?: number
+  processName?: string
+  title?: string
+  formId: number
+  formVersion: number
+  formData: Record<string, any>
+  draftStatus?: number
+  attachmentIds?: number[]
+  ccUserIds?: number[]
 }
 
 export interface CcTaskVO extends ApprovalTaskVO {

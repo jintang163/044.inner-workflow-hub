@@ -24,12 +24,31 @@ public class WfFormDraft extends BaseEntity {
 
     private String processKey;
 
+    private Long processVersionId;
+
+    private String processName;
+
+    private String title;
+
     private Long formId;
 
     private Integer formVersion;
 
+    private Long formDefinitionId;
+
     @TableField(typeHandler = com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler.class)
     private Object formData;
+
+    private Integer draftStatus;
+
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private LocalDateTime lastAutoSaveTime;
+
+    private Integer autoSaveCount;
+
+    private String attachmentIds;
+
+    private String ccUserIds;
 
     private Long creatorId;
 

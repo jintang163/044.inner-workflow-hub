@@ -7,6 +7,8 @@ import com.innerworkflow.form.dto.FormDraftSaveDTO;
 import com.innerworkflow.form.entity.WfFormDraft;
 import com.innerworkflow.form.vo.FormDraftVO;
 
+import java.util.List;
+
 public interface WfFormDraftService extends IService<WfFormDraft> {
 
     Page<FormDraftVO> pageList(FormDraftQueryDTO queryDTO);
@@ -17,5 +19,13 @@ public interface WfFormDraftService extends IService<WfFormDraft> {
 
     FormDraftVO saveDraft(FormDraftSaveDTO saveDTO);
 
+    FormDraftVO autoSave(FormDraftSaveDTO saveDTO);
+
+    FormDraftVO getLatestByProcessKey(String processKey);
+
+    List<FormDraftVO> listMyDrafts(String processKey);
+
     Boolean deleteDraft(Long id);
+
+    Integer cleanExpiredDrafts(Integer days);
 }

@@ -23,6 +23,7 @@ import {
   StartableProcessVO,
   DraftVO,
   CcTaskVO,
+  DraftSaveDTO,
   ApproveDTO,
   RejectDTO,
   RejectToNodeDTO,
@@ -156,9 +157,13 @@ export const formApi = {
         : `/form/definition/${definitionId}/schema`,
       method: 'get'
     }),
-  draftList: (params?: any) => request<PageResult<DraftVO>>({ url: '/form/draft/list', method: 'get', params }),
-  draftSave: (data: any) => request<DraftVO>({ url: '/form/draft/save', method: 'post', data }),
+  draftList: (params?: any) => request<DraftVO[]>({ url: '/form/draft/list', method: 'get', params }),
+  draftPage: (params?: any) => request<PageResult<DraftVO>>({ url: '/form/draft/page', method: 'get', params }),
+  draftSave: (data: DraftSaveDTO) => request<DraftVO>({ url: '/form/draft', method: 'post', data }),
+  draftAutoSave: (data: DraftSaveDTO) => request<DraftVO>({ url: '/form/draft/auto-save', method: 'post', data }),
   draftGet: (id: number) => request<DraftVO>({ url: `/form/draft/${id}`, method: 'get' }),
+  draftGetByNo: (draftNo: string) => request<DraftVO>({ url: `/form/draft/no/${draftNo}`, method: 'get' }),
+  draftGetLatest: (processKey: string) => request<DraftVO>({ url: `/form/draft/latest/${processKey}`, method: 'get' }),
   draftRemove: (id: number) => request<void>({ url: `/form/draft/${id}`, method: 'delete' })
 }
 

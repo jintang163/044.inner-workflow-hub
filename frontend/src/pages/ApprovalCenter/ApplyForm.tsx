@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Card,
   Steps,
@@ -21,7 +21,9 @@ import {
   Modal,
   Row,
   Col,
-  Spin
+  Spin,
+  Switch,
+  Alert
 } from 'antd'
 import {
   ArrowLeftOutlined,
@@ -35,14 +37,17 @@ import {
   ExclamationCircleOutlined,
   ClockCircleOutlined,
   UserOutlined,
-  SafetyCertificateOutlined
+  SafetyCertificateOutlined,
+  CloudUploadOutlined,
+  DatabaseOutlined
 } from '@ant-design/icons'
 import type { UploadFile, UploadProps } from 'antd/es/upload/interface'
 import type { DataNode } from 'antd/es/tree'
 import { approvalApi, formApi } from '@/api'
-import type { StartableProcessVO, ProcessCategoryVO, DraftVO } from '@/types/approval'
+import type { StartableProcessVO, ProcessCategoryVO, DraftVO, DraftSaveDTO } from '@/types/approval'
 import type { FormilySchema } from '@/types/form'
 import FormRenderer, { type FormRendererRef } from '@/components/FormRenderer'
+import { useAutoSave } from '@/hooks/useAutoSave'
 import dayjs from 'dayjs'
 
 const { Step } = Steps
@@ -248,6 +253,9 @@ const mockCcUsers = [
 
 const ApplyForm: React.FC = () => {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const draftIdFromUrl = searchParams.get('draftId')
+
   const [currentStep, setCurrentStep] = useState(0)
   const [loading, setLoading] = useState(false)
   const [schemaLoading, setSchemaLoading] = useState(false)
@@ -265,13 +273,46 @@ const ApplyForm: React.FC = () => {
   const [fileList, setFileList] = useState<UploadFile[]>([])
   const [ccUserIds, setCcUserIds] = useState<number[]>([])
 
-  const [drafts, setDrafts] = useState<DraftVO[]>(mockDrafts)
+  const [drafts, setDrafts] = useState<DraftVO[]>([])
   const [showDrafts, setShowDrafts] = useState(true)
-  const [draftId, setDraftId] = useState<number | null>(null)
-  const [savedState, setSavedState] = useState<{ saved: boolean; time?: string }>({ saved: false })
+  const [draftsLoading, setDraftsLoading] = useState(false)
 
-  const autoSaveTimer = useRef<number | null>(null)
-  const debounceTimer = useRef<number | null>(null)
+  const [localDraftAlert, setLocalDraftAlert] = useState(false)
+
+  const autoSaveHook = useAutoSave({
+    processKey: selectedProcess?.processKey || '',
+    processDefinitionId: selectedProcess?.id || 0,
+    formId: selectedProcess?.formId || 0,
+    formVersion: selectedProcess?.formVersion || 0,
+    processName: selectedProcess?.processName,
+    title: formValues?.title,
+    enabled: !!selectedProcess,
+    draftId: draftIdFromUrl ? Number(draftIdFromUrl) : undefined,
+    interval: 30000,
+    onSaveSuccess: (draft) => {
+      setSavedState({ saved: true, time: dayjs().format('HH:mm:ss') })
+      setTimeout(() => setSavedState(prev => ({ ...prev, saved: false })), 2000)
+      loadDrafts()
+    }
+  })
+
+  const {
+    draftId,
+    draftNo,
+    lastSaveTime,
+    saving: autoSaving,
+    autoSaveEnabled,
+    manualSave,
+    enableAutoSave,
+    disableAutoSave,
+    updateFormDataRef,
+    updateAttachmentIds,
+    updateCcUserIds,
+    loadFromLocalStorage,
+    clearLocalStorage
+  } = autoSaveHook
+
+  const [savedState, setSavedState] = useState<{ saved: boolean; time?: string }>({ saved: false })
 
   const loadSchema = useCallback(async (formId: number, version?: number) => {
     setSchemaLoading(true)
@@ -313,47 +354,67 @@ const ApplyForm: React.FC = () => {
     loadProcesses()
   }, [loadProcesses])
 
-  const autoSaveDraft = useCallback(async () => {
-    if (!selectedProcess || Object.keys(formValues).length === 0) return
+  const loadDrafts = useCallback(async () => {
+    setDraftsLoading(true)
     try {
-      const data = {
-        processKey: selectedProcess.processKey,
-        processName: selectedProcess.processName,
-        title: formValues.title || selectedProcess.processName,
-        formData: formValues
-      }
-      // const res = await formApi.draftSave(data)
-      const newDraft: DraftVO = {
-        id: draftId || Date.now(),
-        ...data,
-        updateTime: dayjs().format('YYYY-MM-DD HH:mm:ss')
-      }
-      setDraftId(newDraft.id)
-      setSavedState({ saved: true, time: dayjs().format('HH:mm:ss') })
-      setTimeout(() => setSavedState(prev => ({ ...prev, saved: false })), 2000)
-    } catch (_) {}
-  }, [selectedProcess, formValues, draftId])
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      autoSaveDraft()
-    }, 30000)
-    return () => clearInterval(interval)
-  }, [autoSaveDraft])
-
-  const triggerDebouncedSave = () => {
-    if (debounceTimer.current) clearTimeout(debounceTimer.current)
-    debounceTimer.current = window.setTimeout(() => {
-      autoSaveDraft()
-    }, 2000)
-  }
-
-  useEffect(() => {
-    return () => {
-      if (autoSaveTimer.current) clearInterval(autoSaveTimer.current)
-      if (debounceTimer.current) clearTimeout(debounceTimer.current)
+      const list = await formApi.draftList()
+      setDrafts(list || [])
+    } catch (err: any) {
+      console.warn('加载草稿列表失败:', err?.message)
+      setDrafts([])
+    } finally {
+      setDraftsLoading(false)
     }
   }, [])
+
+  useEffect(() => {
+    loadDrafts()
+  }, [loadDrafts])
+
+  const checkLocalDraft = useCallback((processKey: string) => {
+    const localData = loadFromLocalStorage()
+    if (localData && localData.processKey === processKey && localData.formData) {
+      setLocalDraftAlert(true)
+      return localData
+    }
+    return null
+  }, [loadFromLocalStorage])
+
+  const restoreFromLocal = useCallback(() => {
+    const localData = loadFromLocalStorage()
+    if (localData && localData.formData) {
+      setTimeout(() => {
+        if (formRendererRef.current) {
+          Object.entries(localData.formData || {}).forEach(([k, v]) => {
+            formRendererRef.current?.setFieldValue(k, v)
+          })
+        }
+        setFormValues({ ...localData.formData })
+        if (localData.attachmentIds?.length) {
+          updateAttachmentIds(localData.attachmentIds)
+        }
+        if (localData.ccUserIds?.length) {
+          setCcUserIds(localData.ccUserIds)
+          updateCcUserIds(localData.ccUserIds)
+        }
+      }, 100)
+      message.success('已从本地缓存恢复草稿')
+    }
+    setLocalDraftAlert(false)
+  }, [loadFromLocalStorage, updateAttachmentIds, updateCcUserIds])
+
+  useEffect(() => {
+    updateFormDataRef(formValues)
+  }, [formValues, updateFormDataRef])
+
+  useEffect(() => {
+    const attIds = fileList.filter(f => f.status === 'done').map(f => Number(f.uid)).filter(Boolean)
+    updateAttachmentIds(attIds)
+  }, [fileList, updateAttachmentIds])
+
+  useEffect(() => {
+    updateCcUserIds(ccUserIds)
+  }, [ccUserIds, updateCcUserIds])
 
   const handleProcessSelect = async (process: StartableProcessVO) => {
     setSelectedProcess(process)
@@ -361,8 +422,18 @@ const ApplyForm: React.FC = () => {
     setFormSchema(null)
     setFileList([])
     setCcUserIds([])
-    setDraftId(null)
+    setLocalDraftAlert(false)
     await loadSchema(process.formId, process.formVersion)
+
+    checkLocalDraft(process.processKey)
+
+    setTimeout(() => {
+      if (formRendererRef.current && formSchema) {
+        const defaultTitle = process.processName + '-' + dayjs().format('YYYY-MM-DD')
+        formRendererRef.current.setFieldValue('title', defaultTitle)
+        setFormValues(prev => ({ ...prev, title: defaultTitle }))
+      }
+    }, 80)
   }
 
   const handleNextToForm = () => {
@@ -371,17 +442,12 @@ const ApplyForm: React.FC = () => {
       return
     }
     setCurrentStep(1)
-    setTimeout(() => {
-      if (formRendererRef.current && formSchema) {
-        const defaultTitle = selectedProcess.processName + '-' + dayjs().format('YYYY-MM-DD')
-        formRendererRef.current.setFieldValue('title', defaultTitle)
-        setFormValues(prev => ({ ...prev, title: defaultTitle }))
-      }
-    }, 50)
+    enableAutoSave()
   }
 
   const handleBackToProcess = () => {
     setCurrentStep(0)
+    disableAutoSave()
   }
 
   const handleNextToConfirm = async () => {
@@ -392,7 +458,6 @@ const ApplyForm: React.FC = () => {
         values.title = selectedProcess.processName + '-' + dayjs().format('YYYY-MM-DD')
       }
       setFormValues(values || {})
-      triggerDebouncedSave()
       setCurrentStep(2)
     } catch (_) {}
   }
@@ -403,7 +468,6 @@ const ApplyForm: React.FC = () => {
 
   const handleFormValuesChange = (values: Record<string, any>) => {
     setFormValues(values)
-    triggerDebouncedSave()
   }
 
   const handleSubmit = async () => {
@@ -411,16 +475,18 @@ const ApplyForm: React.FC = () => {
     try {
       setSubmitLoading(true)
       const values = await formRendererRef.current.submit()
+      const attIds = fileList.filter(f => f.status === 'done').map(f => Number(f.uid)).filter(Boolean)
       const submitData = {
         processKey: selectedProcess.processKey,
         title: values.title || selectedProcess.processName,
         formData: values,
         ccUserIds,
-        attachmentIds: fileList.filter(f => f.status === 'done').map(f => Number(f.uid)).filter(Boolean),
+        attachmentIds: attIds,
         draftId: draftId || undefined
       }
       // const res = await approvalApi.start(submitData)
       message.success('审批发起成功！')
+      clearLocalStorage()
       navigate('/approval/my-apply')
     } catch (err: any) {
       message.error(err?.message || '提交失败')
@@ -433,8 +499,11 @@ const ApplyForm: React.FC = () => {
     if (!selectedProcess) return
     try {
       setSubmitLoading(true)
-      autoSaveDraft()
-      message.success('草稿已保存')
+      const values = formValues
+      if (!values.title && selectedProcess) {
+        values.title = selectedProcess.processName + '-' + dayjs().format('YYYY-MM-DD')
+      }
+      await manualSave(values)
     } catch (err: any) {
       message.error(err?.message || '保存失败')
     } finally {
@@ -447,16 +516,21 @@ const ApplyForm: React.FC = () => {
     if (process) {
       await handleProcessSelect(process)
       setTimeout(() => {
-        if (formRendererRef.current) {
+        if (formRendererRef.current && draft.formData) {
           Object.entries(draft.formData || {}).forEach(([k, v]) => {
             formRendererRef.current?.setFieldValue(k, v)
           })
         }
         setFormValues({ ...draft.formData })
-      }, 80)
-      setDraftId(draft.id)
+        if (draft.ccUserIds?.length) {
+          setCcUserIds(draft.ccUserIds)
+        }
+      }, 100)
+      autoSaveHook.setDraftId(draft.id)
+      autoSaveHook.setDraftNo(draft.draftNo)
       setCurrentStep(1)
       setShowDrafts(false)
+      enableAutoSave()
     }
   }
 
@@ -468,9 +542,10 @@ const ApplyForm: React.FC = () => {
       okButtonProps: { danger: true },
       onOk: async () => {
         try {
-          // await formApi.draftRemove(draft.id)
+          await formApi.draftRemove(draft.id)
           setDrafts(prev => prev.filter(d => d.id !== draft.id))
           message.success('已删除')
+          clearLocalStorage()
         } catch (err: any) {
           message.error(err?.message || '删除失败')
         }
@@ -511,19 +586,66 @@ const ApplyForm: React.FC = () => {
   return (
     <div style={{ padding: 16 }}>
       <Card style={{ borderRadius: 8, marginBottom: 16 }}>
-        <Space style={{ marginBottom: 24 }}>
-          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(-1)}>
-            返回
-          </Button>
-          <h2 style={{ margin: 0 }}>发起审批</h2>
-          {savedState.saved && (
-            <Tag color="success" icon={<ClockCircleOutlined />}>
-              已自动保存于 {savedState.time}
-            </Tag>
+        <Space style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between' }}>
+          <Space>
+            <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(-1)}>
+              返回
+            </Button>
+            <h2 style={{ margin: 0 }}>发起审批</h2>
+            {savedState.saved && (
+              <Tag color="success" icon={<ClockCircleOutlined />}>
+                已自动保存于 {savedState.time}
+              </Tag>
+            )}
+          </Space>
+          {currentStep >= 1 && (
+            <Space>
+              <Tag icon={<DatabaseOutlined />} color="blue">
+                本地备份已启用
+              </Tag>
+              <Space size={4}>
+                <span style={{ fontSize: 13, color: '#8c8c8c' }}>自动保存</span>
+                <Switch
+                  size="small"
+                  checked={autoSaveEnabled}
+                  onChange={(checked) => {
+                    if (checked) {
+                      enableAutoSave()
+                      message.success('已开启自动保存')
+                    } else {
+                      disableAutoSave()
+                      message.info('已关闭自动保存')
+                    }
+                  }}
+                />
+              </Space>
+            </Space>
           )}
         </Space>
         <Steps current={currentStep} items={steps} />
       </Card>
+
+      {currentStep >= 1 && localDraftAlert && (
+        <Alert
+          message="检测到本地未提交的草稿"
+          description="系统检测到您上次有未提交的草稿保存在本地，是否恢复？"
+          type="warning"
+          showIcon
+          closable
+          onClose={() => setLocalDraftAlert(false)}
+          style={{ marginBottom: 16 }}
+          action={
+            <Space>
+              <Button size="small" type="primary" onClick={restoreFromLocal}>
+                恢复草稿
+              </Button>
+              <Button size="small" onClick={() => setLocalDraftAlert(false)}>
+                忽略
+              </Button>
+            </Space>
+          }
+        />
+      )}
 
       {currentStep === 0 && (
         <Row gutter={16}>
@@ -572,6 +694,7 @@ const ApplyForm: React.FC = () => {
                 <List
                   grid={{ gutter: 16, xs: 1, sm: 2, md: 3, lg: 3, xl: 4 }}
                   dataSource={drafts}
+                  loading={draftsLoading}
                   renderItem={(draft) => (
                     <List.Item>
                       <Card
@@ -598,15 +721,29 @@ const ApplyForm: React.FC = () => {
                         ]}
                       >
                         <Card.Meta
-                          title={<Text strong ellipsis>{draft.title}</Text>}
+                          title={<Text strong ellipsis>{draft.title || draft.processName}</Text>}
                           description={
-                            <Space direction="vertical" size={0} style={{ marginTop: 4 }}>
-                              <Tag color="blue" style={{ margin: 0 }}>{draft.processName}</Tag>
+                            <Space direction="vertical" size={4} style={{ marginTop: 4 }}>
+                              <Space size={4}>
+                                <Tag color="blue" style={{ margin: 0 }}>{draft.processName}</Tag>
+                                {draft.draftStatus === 2 ? (
+                                  <Tag color="orange" style={{ margin: 0, fontSize: 11 }}>
+                                  自动保存
+                                </Tag>
+                              ) : (
+                                <Tag color="green" style={{ margin: 0, fontSize: 11 }}>
+                                  手动保存
+                                </Tag>
+                              )}
+                            </Space>
+                            <Space size={4} wrap={false}>
+                              <ClockCircleOutlined style={{ fontSize: 12, color: '#8c8c8c' }} />
                               <Text type="secondary" style={{ fontSize: 12 }}>
                                 {dayjs(draft.updateTime).fromNow()}
                               </Text>
                             </Space>
-                          }
+                          </Space>
+                        }
                         />
                       </Card>
                     </List.Item>
@@ -706,7 +843,7 @@ const ApplyForm: React.FC = () => {
               <Button
                 icon={<SaveOutlined />}
                 onClick={handleSaveDraft}
-                loading={submitLoading}
+                loading={autoSaving}
               >
                 保存草稿
               </Button>
